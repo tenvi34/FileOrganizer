@@ -51,5 +51,37 @@ class FileOrganizer:
         ttk.Button(rule_frame, text="규칙 추가", command=self.add_rule).grid(row=0, column=5, padx=10)
         
         # 규칙 목록
+        list_frame = ttk.Frame(main_frame)
+        list_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
+        # 트리뷰(TreeView)로 규칙 표시
+        self.tree = ttk.Treeview(list_frame, columns=("키워드", "대상 폴더"), show="tree headings", height=10)
+        self.tree = ttk.Treeview(list_frame, columns=('키워드', '대상 폴더'), show='tree headings', height=10)
         
+        self.tree.heading('#0', text='번호')
+        self.tree.heading('키워드', text='키워드')
+        self.tree.heading('대상 폴더', text='대상 폴더')
+        
+        self.tree.column('#0', width=50)
+        self.tree.column('키워드', width=150)
+        self.tree.column('대상 폴더', width=400)
+        
+        # 스크롤바
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # 규칙 삭제 버튼
+        ttk.Button(main_frame, text="선택한 규칙 삭제", command=self.delete_rule).grid(row=3, column=0, columnspan=3, pady=5)
+        
+        # 옵션
+        option_frame = ttk.LabelFrame(main_frame, text="옵션", padding="10")
+        option_frame.grid(row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
+        
+        self.subfolder_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(option_frame, text="하위 폴더 포함", variable=self.subfolder_var).grid(row=0, column=0, sticky=tk.W)
+        
+        self.copy_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(option_frame, text="복사 (체크 안하면 이동)", variable=self.copy_var).grid(row=0, column=1, sticky=tk.W, padx=20)

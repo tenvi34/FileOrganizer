@@ -85,3 +85,31 @@ class FileOrganizer:
         
         self.copy_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(option_frame, text="복사 (체크 안하면 이동)", variable=self.copy_var).grid(row=0, column=1, sticky=tk.W, padx=20)
+        
+        # 실행 버튼
+        button_frame = ttk.Frame(main_frame)
+        button_frame.grid(row=5, column=0, columnspan=3, pady=20)
+        
+        ttk.Button(button_frame, text="파일 정리 시작", command=self.organize_files, style='Accent.TButton').pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="미리보기", command=self.preview_files).pack(side=tk.LEFT, padx=5)
+        
+        # 로그 영역
+        log_frame = ttk.LabelFrame(main_frame, text="로그", padding="5")
+        log_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        
+        self.log_text = tk.Text(log_frame, height=8, width=70)
+        log_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scrollbar.set)
+        
+        self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        log_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # 그리드 가중치 설정
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(2, weight=1)
+        main_frame.rowconfigure(6, weight=1)
+        
+        # 저장된 규칙 로드
+        self.update_rule_list()

@@ -10,20 +10,22 @@ import json
 from datetime import datetime
 import threading
 
-
 class FileOrganizer:
     def __init__(self, root):
         self.root = root
         self.root.title("파일 자동 분류 프로그램")
-        self.root.geometry("800x600")
-
+        self.root.geometry("900x800")
+        
         # 설정 파일 경로
         self.config_file = "file_organizer_config.json"
         self.rules = self.load_config()
-
+        
+        # 로그 창 변수
+        self.log_window = None
+        
         # UI 설정
         self.setup_ui()
-
+        
     def setup_ui(self):
         # 메인 프레임
         main_frame = ttk.Frame(self.root, padding="10")
@@ -54,10 +56,8 @@ class FileOrganizer:
         list_frame = ttk.Frame(main_frame)
         list_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
-        # 트리뷰(TreeView)로 규칙 표시
-        self.tree = ttk.Treeview(list_frame, columns=("키워드", "대상 폴더"), show="tree headings", height=10)
+        # 트리뷰로 규칙 표시
         self.tree = ttk.Treeview(list_frame, columns=('키워드', '대상 폴더'), show='tree headings', height=10)
-        
         self.tree.heading('#0', text='번호')
         self.tree.heading('키워드', text='키워드')
         self.tree.heading('대상 폴더', text='대상 폴더')
@@ -93,23 +93,49 @@ class FileOrganizer:
         ttk.Button(button_frame, text="파일 정리 시작", command=self.organize_files, style='Accent.TButton').pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="미리보기", command=self.preview_files).pack(side=tk.LEFT, padx=5)
         
+        # 진행률 표시
+        progress_frame = ttk.Frame(main_frame)
+        progress_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=5)
+        
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=5)
+        
+        self.progress_label = ttk.Label(progress_frame, text="준비 중...")
+        self.progress_label.grid(row=0, column=1, padx=5)
+        
+        progress_frame.columnconfigure(0, weight=1)
+        
         # 로그 영역
         log_frame = ttk.LabelFrame(main_frame, text="로그", padding="5")
-        log_frame.grid(row=6, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
+        log_frame.grid(row=7, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
-        self.log_text = tk.Text(log_frame, height=8, width=70)
+        # 로그 버튼 프레임
+        log_button_frame = ttk.Frame(log_frame)
+        log_button_frame.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=(0, 5))
+        
+        ttk.Button(log_button_frame, text="로그 지우기", command=self.clear_log).pack(side=tk.LEFT, padx=2)
+        ttk.Button(log_button_frame, text="로그 저장", command=self.save_log).pack(side=tk.LEFT, padx=2)
+        ttk.Button(log_button_frame, text="별도 창에서 보기", command=self.open_log_window).pack(side=tk.LEFT, padx=2)
+        
+        # 로그 텍스트 영역 (크기 증가)
+        self.log_text = tk.Text(log_frame, height=12, width=70, wrap=tk.WORD)
         log_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=log_scrollbar.set)
         
-        self.log_text.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        log_scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.log_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        log_scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S))
+        
+        # 로그 프레임 그리드 가중치
+        log_frame.rowconfigure(1, weight=1)
+        log_frame.columnconfigure(0, weight=1)
         
         # 그리드 가중치 설정
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
         main_frame.rowconfigure(2, weight=1)
-        main_frame.rowconfigure(6, weight=1)
+        main_frame.rowconfigure(7, weight=1)
         
         # 저장된 규칙 로드
         self.update_rule_list()
@@ -124,15 +150,14 @@ class FileOrganizer:
         if folder:
             self.dest_var.set(folder)
             
-    # 규칙 추가
     def add_rule(self):
         keyword = self.keyword_var.get().strip()
-        dest = self.dest_var.get().split()
+        dest = self.dest_var.get().strip()
         
         if not keyword or not dest:
             messagebox.showwarning("경고", "키워드와 대상 폴더를 모두 입력하세요.")
             return
-        
+            
         # 규칙 추가
         self.rules[keyword] = dest
         self.save_config()
@@ -144,15 +169,14 @@ class FileOrganizer:
         
         self.log(f"규칙 추가: '{keyword}' → '{dest}'")
         
-    # 규칙 삭제
     def delete_rule(self):
         selected = self.tree.selection()
         if not selected:
             messagebox.showwarning("경고", "삭제할 규칙을 선택하세요.")
             return
-        
+            
         item = self.tree.item(selected[0])
-        keyword = item["values"][0]
+        keyword = item['values'][0]
         
         if messagebox.askyesno("확인", f"'{keyword}' 규칙을 삭제하시겠습니까?"):
             del self.rules[keyword]
@@ -160,7 +184,6 @@ class FileOrganizer:
             self.update_rule_list()
             self.log(f"규칙 삭제: '{keyword}'")
             
-    # 규칙 목록 업데이트
     def update_rule_list(self):
         # 기존 항목 삭제
         for item in self.tree.get_children():
@@ -178,7 +201,7 @@ class FileOrganizer:
             except:
                 return {}
         return {}
-    
+        
     def save_config(self):
         with open(self.config_file, 'w', encoding='utf-8') as f:
             json.dump(self.rules, f, ensure_ascii=False, indent=2)
@@ -189,16 +212,27 @@ class FileOrganizer:
         self.log_text.see(tk.END)
         self.root.update()
         
+    def update_progress(self, current, total, message=""):
+        """진행률 업데이트"""
+        if total > 0:
+            progress = (current / total) * 100
+            self.progress_var.set(progress)
+            self.progress_label.config(text=f"{current}/{total} ({progress:.1f}%) {message}")
+        else:
+            self.progress_var.set(0)
+            self.progress_label.config(text=message)
+        self.root.update()
+        
     def find_matching_files(self, preview=False):
         source = self.source_var.get()
         if not source or not os.path.exists(source):
             messagebox.showerror("오류", "유효한 대상 폴더를 선택하세요.")
             return []
-        
+            
         if not self.rules:
             messagebox.showwarning("경고", "분류 규칙이 없습니다.")
             return []
-        
+            
         matches = []
         include_subfolders = self.subfolder_var.get()
         
@@ -223,31 +257,43 @@ class FileOrganizer:
                             if preview:
                                 self.log(f"매칭: {file} → {dest} (키워드: {keyword})")
                             break
-        
+                            
         return matches
-    
+        
     def preview_files(self):
         self.log_text.delete(1.0, tk.END)
         self.log("=== 미리보기 시작 ===")
+        
+        # 진행률 초기화
+        self.update_progress(0, 0, "파일 검색 중...")
         
         matches = self.find_matching_files(preview=True)
         
         if matches:
             self.log(f"\n총 {len(matches)}개 파일이 이동될 예정입니다.")
+            # 많은 파일이 있을 경우 별도 창 열기 제안
+            if len(matches) > 50:
+                if messagebox.askyesno("많은 파일", 
+                    f"{len(matches)}개의 파일이 발견되었습니다.\n별도 창에서 로그를 보시겠습니까?"):
+                    self.open_log_window()
         else:
             self.log("\n매칭되는 파일이 없습니다.")
             
         self.log("=== 미리보기 종료 ===\n")
+        self.update_progress(0, 0, "미리보기 완료")
         
     def organize_files(self):
         if messagebox.askyesno("확인", "파일 정리를 시작하시겠습니까?"):
-            # 별도 스레드에서 진행
+            # 별도 스레드에서 실행
             thread = threading.Thread(target=self._organize_files_thread)
             thread.start()
             
     def _organize_files_thread(self):
         self.log_text.delete(1.0, tk.END)
-        self.log("===파일 정리 시작===")
+        self.log("=== 파일 정리 시작 ===")
+        
+        # 진행률 초기화
+        self.update_progress(0, 0, "파일 검색 중...")
         
         matches = self.find_matching_files()
         is_copy = self.copy_var.get()
@@ -255,19 +301,30 @@ class FileOrganizer:
         
         success_count = 0
         error_count = 0
+        total_files = len(matches)
         
-        for file_path, dest_folder, keyword in matches:
+        if total_files == 0:
+            self.log("매칭되는 파일이 없습니다.")
+            self.update_progress(0, 0, "완료 - 매칭 파일 없음")
+            return
+        
+        self.log(f"총 {total_files}개 파일을 처리합니다.")
+        
+        for i, (file_path, dest_folder, keyword) in enumerate(matches, 1):
             try:
+                # 진행률 업데이트
+                file_name = os.path.basename(file_path)
+                self.update_progress(i, total_files, f"처리 중: {file_name}")
+                
                 # 대상 폴더가 없으면 생성
                 if not os.path.exists(dest_folder):
                     os.makedirs(dest_folder)
                     self.log(f"폴더 생성: {dest_folder}")
                     
                 # 파일명 추출
-                file_name = os.path.basename(file_path)
                 dest_path = os.path.join(dest_folder, file_name)
                 
-                # 동일한 파일명이 있을 경우
+                # 동일한 파일명이 있을 경우 처리
                 if os.path.exists(dest_path):
                     base_name, ext = os.path.splitext(file_name)
                     counter = 1
@@ -275,7 +332,7 @@ class FileOrganizer:
                         new_name = f"{base_name}_{counter}{ext}"
                         dest_path = os.path.join(dest_folder, new_name)
                         counter += 1
-                    
+                        
                 # 파일 복사 또는 이동
                 if is_copy:
                     shutil.copy2(file_path, dest_path)
@@ -288,19 +345,94 @@ class FileOrganizer:
             except Exception as e:
                 self.log(f"오류 발생: {file_name} - {str(e)}")
                 error_count += 1
-            
+                
         self.log(f"\n=== 작업 완료 ===")
         self.log(f"성공: {success_count}개 파일")
         self.log(f"실패: {error_count}개 파일")
         
+        # 진행률 완료
+        self.update_progress(total_files, total_files, "작업 완료!")
+        
         # 메인 스레드에서 메시지박스 표시
         self.root.after(0, lambda: messagebox.showinfo("완료", 
             f"파일 정리가 완료되었습니다.\n\n성공: {success_count}개\n실패: {error_count}개"))
+    
+    def clear_log(self):
+        """로그 내용 지우기"""
+        self.log_text.delete(1.0, tk.END)
+        self.log("로그를 지웠습니다.")
+    
+    def save_log(self):
+        """로그를 파일로 저장"""
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("텍스트 파일", "*.txt"), ("모든 파일", "*.*")],
+            initialfile=f"file_organizer_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        )
+        if filename:
+            try:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    f.write(self.log_text.get(1.0, tk.END))
+                messagebox.showinfo("저장 완료", f"로그가 저장되었습니다:\n{filename}")
+            except Exception as e:
+                messagebox.showerror("오류", f"로그 저장 중 오류 발생:\n{str(e)}")
+    
+    def open_log_window(self):
+        """별도 창에서 로그 보기"""
+        if self.log_window is not None and self.log_window.winfo_exists():
+            self.log_window.lift()
+            return
+        
+        self.log_window = tk.Toplevel(self.root)
+        self.log_window.title("로그 뷰어")
+        self.log_window.geometry("800x600")
+        
+        # 프레임
+        frame = ttk.Frame(self.log_window, padding="10")
+        frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # 버튼
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 10))
+        
+        ttk.Button(button_frame, text="새로고침", command=self.refresh_log_window).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame, text="모두 복사", command=self.copy_all_log).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_frame, text="저장", command=self.save_log).pack(side=tk.LEFT, padx=2)
+        
+        # 텍스트 위젯
+        self.log_window_text = tk.Text(frame, wrap=tk.WORD, height=30)
+        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=self.log_window_text.yview)
+        self.log_window_text.configure(yscrollcommand=scrollbar.set)
+        
+        self.log_window_text.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        scrollbar.grid(row=1, column=1, sticky=(tk.N, tk.S))
+        
+        # 현재 로그 내용 복사
+        self.log_window_text.insert(1.0, self.log_text.get(1.0, tk.END))
+        
+        # 그리드 가중치
+        self.log_window.columnconfigure(0, weight=1)
+        self.log_window.rowconfigure(0, weight=1)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+    
+    def refresh_log_window(self):
+        """로그 창 내용 새로고침"""
+        if hasattr(self, 'log_window_text'):
+            self.log_window_text.delete(1.0, tk.END)
+            self.log_window_text.insert(1.0, self.log_text.get(1.0, tk.END))
+            self.log_window_text.see(tk.END)
+    
+    def copy_all_log(self):
+        """전체 로그를 클립보드에 복사"""
+        self.root.clipboard_clear()
+        self.root.clipboard_append(self.log_text.get(1.0, tk.END))
+        messagebox.showinfo("복사 완료", "로그가 클립보드에 복사되었습니다.")
 
 def main():
     root = tk.Tk()
     app = FileOrganizer(root)
     root.mainloop()
-    
+
 if __name__ == "__main__":
     main()

@@ -256,7 +256,7 @@ class FileOrganizer:
         success_count = 0
         error_count = 0
         
-        for file_path, dest_folder, keyword in matchse:
+        for file_path, dest_folder, keyword in matches:
             try:
                 # 대상 폴더가 없으면 생성
                 if not os.path.exists(dest_folder):

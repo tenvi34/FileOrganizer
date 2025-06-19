@@ -197,9 +197,23 @@ class FileOrganizer:
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                return {}
+                    data = json.load(f)
+                    # 잘못된 형식 자동 수정
+                    fixed_data = {}
+                    for key, value in data.items():
+                        if isinstance(value, list):
+                            # 리스트인 경우 문자열로 변환
+                            fixed_data[key] = ' '.join(value)
+                        else:
+                            fixed_data[key] = value
+                    # 수정이 필요했다면 파일 다시 저장
+                    if fixed_data != data:
+                        self.rules = fixed_data
+                        self.save_config()
+                        self.log("설정 파일 형식을 자동으로 수정했습니다.")
+                    return fixed_data
+            except Exception as e:
+                self.log(f"설정 파일 로드 중 오류: {str(e)}")
         return {}
         
     def save_config(self):

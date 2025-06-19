@@ -4,18 +4,19 @@ on:
   push:
     branches: [ main ]
     tags:
-      - 'v*'  # 태그 푸시할 때만 실행
-  workflow_dispatch:  # 수동 실행도 가능
+      - 'v*'
+  pull_request:
+    branches: [ main ]
 
 jobs:
   build-windows:
     runs-on: windows-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -29,14 +30,14 @@ jobs:
         pyinstaller --onefile --windowed --name "FileOrganizer" --icon=NONE file_organizer.py
     
     - name: Upload artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: FileOrganizer-Windows
         path: dist/FileOrganizer.exe
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
         files: dist/FileOrganizer.exe
         draft: false

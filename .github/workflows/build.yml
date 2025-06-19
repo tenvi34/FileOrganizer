@@ -2,7 +2,7 @@ name: Build Windows Executable
 
 on:
   push:
-    # branches: [ main ]  # 주석 처리
+    branches: [ main ]
     tags:
       - 'v*'  # 태그 푸시할 때만 실행
   workflow_dispatch:  # 수동 실행도 가능

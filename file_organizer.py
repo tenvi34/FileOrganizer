@@ -9,12 +9,13 @@ from pathlib import Path
 import json
 from datetime import datetime
 import threading
+import re
 
 class FileOrganizer:
     def __init__(self, root):
         self.root = root
         self.root.title("파일 자동 분류 프로그램")
-        self.root.geometry("900x800")
+        self.root.geometry("1000x850")
         
         # 설정 파일 경로
         self.config_file = "file_organizer_config.json"
@@ -22,6 +23,9 @@ class FileOrganizer:
         
         # 로그 창 변수
         self.log_window = None
+        
+        # 체크박스 상태 저장
+        self.check_vars = {}
         
         # UI 설정
         self.setup_ui()
@@ -41,37 +45,64 @@ class FileOrganizer:
         rule_frame = ttk.LabelFrame(main_frame, text="분류 규칙", padding="10")
         rule_frame.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10)
         
+        # 첫 번째 줄: 키워드와 매칭 옵션
         ttk.Label(rule_frame, text="키워드:").grid(row=0, column=0, sticky=tk.W)
         self.keyword_var = tk.StringVar()
         ttk.Entry(rule_frame, textvariable=self.keyword_var, width=20).grid(row=0, column=1, padx=5)
         
-        ttk.Label(rule_frame, text="이동할 폴더:").grid(row=0, column=2, sticky=tk.W, padx=(20, 0))
-        self.dest_var = tk.StringVar()
-        ttk.Entry(rule_frame, textvariable=self.dest_var, width=30).grid(row=0, column=3, padx=5)
-        ttk.Button(rule_frame, text="폴더 선택", command=self.select_dest_folder).grid(row=0, column=4)
+        ttk.Label(rule_frame, text="매칭 옵션:").grid(row=0, column=2, sticky=tk.W, padx=(10, 0))
+        self.match_mode_var = tk.StringVar(value="포함")
+        match_modes = ['포함', '정확히', '시작', '끝', '정규식']
+        self.match_mode_combo = ttk.Combobox(rule_frame, textvariable=self.match_mode_var, 
+                                            values=match_modes, width=10, state='readonly')
+        self.match_mode_combo.grid(row=0, column=3, padx=5)
         
-        ttk.Button(rule_frame, text="규칙 추가", command=self.add_rule).grid(row=0, column=5, padx=10)
+        # 두 번째 줄: 대상 폴더
+        ttk.Label(rule_frame, text="이동할 폴더:").grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
+        self.dest_var = tk.StringVar()
+        ttk.Entry(rule_frame, textvariable=self.dest_var, width=40).grid(row=1, column=1, columnspan=2, padx=5, pady=(5, 0))
+        ttk.Button(rule_frame, text="폴더 선택", command=self.select_dest_folder).grid(row=1, column=3, pady=(5, 0))
+        
+        ttk.Button(rule_frame, text="규칙 추가", command=self.add_rule).grid(row=1, column=4, padx=10, pady=(5, 0))
         
         # 규칙 목록
         list_frame = ttk.Frame(main_frame)
         list_frame.grid(row=2, column=0, columnspan=3, sticky=(tk.W, tk.E, tk.N, tk.S), pady=10)
         
+        # 전체 선택/해제 버튼
+        button_bar = ttk.Frame(list_frame)
+        button_bar.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 5))
+        ttk.Button(button_bar, text="전체 선택", command=self.select_all_rules).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_bar, text="전체 해제", command=self.deselect_all_rules).pack(side=tk.LEFT, padx=2)
+        ttk.Button(button_bar, text="선택 반전", command=self.toggle_all_rules).pack(side=tk.LEFT, padx=2)
+        
         # 트리뷰로 규칙 표시
-        self.tree = ttk.Treeview(list_frame, columns=('키워드', '대상 폴더'), show='tree headings', height=10)
+        tree_frame = ttk.Frame(list_frame)
+        tree_frame.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        self.tree = ttk.Treeview(tree_frame, columns=('활성화', '키워드', '매칭', '대상 폴더'), 
+                                show='tree headings', height=10)
         self.tree.heading('#0', text='번호')
+        self.tree.heading('활성화', text='✓')
         self.tree.heading('키워드', text='키워드')
+        self.tree.heading('매칭', text='매칭 옵션')
         self.tree.heading('대상 폴더', text='대상 폴더')
         
         self.tree.column('#0', width=50)
+        self.tree.column('활성화', width=40, anchor='center')
         self.tree.column('키워드', width=150)
+        self.tree.column('매칭', width=80)
         self.tree.column('대상 폴더', width=400)
         
         # 스크롤바
-        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
         
         self.tree.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        
+        # 트리뷰 클릭 이벤트
+        self.tree.bind('<Button-1>', self.on_tree_click)
         
         # 규칙 삭제 버튼
         ttk.Button(main_frame, text="선택한 규칙 삭제", command=self.delete_rule).grid(row=3, column=0, columnspan=3, pady=5)
@@ -118,7 +149,7 @@ class FileOrganizer:
         ttk.Button(log_button_frame, text="로그 저장", command=self.save_log).pack(side=tk.LEFT, padx=2)
         ttk.Button(log_button_frame, text="별도 창에서 보기", command=self.open_log_window).pack(side=tk.LEFT, padx=2)
         
-        # 로그 텍스트 영역 (크기 증가)
+        # 로그 텍스트 영역
         self.log_text = tk.Text(log_frame, height=12, width=70, wrap=tk.WORD)
         log_scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=log_scrollbar.set)
@@ -140,6 +171,44 @@ class FileOrganizer:
         # 저장된 규칙 로드
         self.update_rule_list()
         
+    def on_tree_click(self, event):
+        """트리뷰 클릭 이벤트 처리"""
+        region = self.tree.identify("region", event.x, event.y)
+        if region == "cell":
+            column = self.tree.identify_column(event.x)
+            if column == "#1":  # 활성화 열
+                item = self.tree.identify_row(event.y)
+                if item:
+                    # 체크 상태 토글
+                    keyword = self.tree.item(item)['values'][1]
+                    if keyword in self.rules:
+                        current = self.rules[keyword].get('enabled', True)
+                        self.rules[keyword]['enabled'] = not current
+                        self.save_config()
+                        self.update_rule_list()
+                        
+    def select_all_rules(self):
+        """모든 규칙 선택"""
+        for keyword in self.rules:
+            self.rules[keyword]['enabled'] = True
+        self.save_config()
+        self.update_rule_list()
+        
+    def deselect_all_rules(self):
+        """모든 규칙 해제"""
+        for keyword in self.rules:
+            self.rules[keyword]['enabled'] = False
+        self.save_config()
+        self.update_rule_list()
+        
+    def toggle_all_rules(self):
+        """모든 규칙 선택 반전"""
+        for keyword in self.rules:
+            current = self.rules[keyword].get('enabled', True)
+            self.rules[keyword]['enabled'] = not current
+        self.save_config()
+        self.update_rule_list()
+        
     def select_source_folder(self):
         folder = filedialog.askdirectory(title="대상 폴더 선택")
         if folder:
@@ -153,21 +222,27 @@ class FileOrganizer:
     def add_rule(self):
         keyword = self.keyword_var.get().strip()
         dest = self.dest_var.get().strip()
+        match_mode = self.match_mode_var.get()
         
         if not keyword or not dest:
             messagebox.showwarning("경고", "키워드와 대상 폴더를 모두 입력하세요.")
             return
             
-        # 규칙 추가
-        self.rules[keyword] = dest
+        # 규칙 추가 (새로운 형식)
+        self.rules[keyword] = {
+            'dest': dest,
+            'match_mode': match_mode,
+            'enabled': True
+        }
         self.save_config()
         self.update_rule_list()
         
         # 입력 필드 초기화
         self.keyword_var.set("")
         self.dest_var.set("")
+        self.match_mode_var.set("포함")
         
-        self.log(f"규칙 추가: '{keyword}' → '{dest}'")
+        self.log(f"규칙 추가: '{keyword}' → '{dest}' (매칭: {match_mode})")
         
     def delete_rule(self):
         selected = self.tree.selection()
@@ -176,7 +251,7 @@ class FileOrganizer:
             return
             
         item = self.tree.item(selected[0])
-        keyword = item['values'][0]
+        keyword = item['values'][1]
         
         if messagebox.askyesno("확인", f"'{keyword}' 규칙을 삭제하시겠습니까?"):
             del self.rules[keyword]
@@ -190,28 +265,40 @@ class FileOrganizer:
             self.tree.delete(item)
             
         # 규칙 추가
-        for i, (keyword, dest) in enumerate(self.rules.items(), 1):
-            self.tree.insert('', 'end', text=str(i), values=(keyword, dest))
+        for i, (keyword, rule_data) in enumerate(self.rules.items(), 1):
+            # 이전 버전 호환성 처리
+            if isinstance(rule_data, str):
+                # 기존 형식: {"keyword": "dest_path"}
+                dest = rule_data
+                match_mode = "포함"
+                enabled = True
+            else:
+                # 새로운 형식: {"keyword": {"dest": "path", "match_mode": "포함", "enabled": true}}
+                dest = rule_data.get('dest', '')
+                match_mode = rule_data.get('match_mode', '포함')
+                enabled = rule_data.get('enabled', True)
+            
+            check_mark = '✓' if enabled else ''
+            self.tree.insert('', 'end', text=str(i), values=(check_mark, keyword, match_mode, dest))
             
     def load_config(self):
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    # 잘못된 형식 자동 수정
-                    fixed_data = {}
+                    # 데이터 형식 업그레이드
+                    upgraded_data = {}
                     for key, value in data.items():
-                        if isinstance(value, list):
-                            # 리스트인 경우 문자열로 변환
-                            fixed_data[key] = ' '.join(value)
+                        if isinstance(value, str):
+                            # 기존 형식을 새 형식으로 변환
+                            upgraded_data[key] = {
+                                'dest': value,
+                                'match_mode': '포함',
+                                'enabled': True
+                            }
                         else:
-                            fixed_data[key] = value
-                    # 수정이 필요했다면 파일 다시 저장
-                    if fixed_data != data:
-                        self.rules = fixed_data
-                        self.save_config()
-                        self.log("설정 파일 형식을 자동으로 수정했습니다.")
-                    return fixed_data
+                            upgraded_data[key] = value
+                    return upgraded_data
             except Exception as e:
                 self.log(f"설정 파일 로드 중 오류: {str(e)}")
         return {}
@@ -237,14 +324,41 @@ class FileOrganizer:
             self.progress_label.config(text=message)
         self.root.update()
         
+    def match_file(self, filename, keyword, match_mode):
+        """파일명과 키워드 매칭"""
+        # 파일명만 추출 (경로 제외)
+        base_filename = os.path.basename(filename)
+        
+        if match_mode == '포함':
+            return keyword.lower() in base_filename.lower()
+        elif match_mode == '정확히':
+            name_without_ext, _ = os.path.splitext(base_filename)
+            return keyword.lower() == name_without_ext.lower()
+        elif match_mode == '시작':
+            return base_filename.lower().startswith(keyword.lower())
+        elif match_mode == '끝':
+            name_without_ext, _ = os.path.splitext(base_filename)
+            return name_without_ext.lower().endswith(keyword.lower())
+        elif match_mode == '정규식':
+            try:
+                return bool(re.search(keyword, base_filename, re.IGNORECASE))
+            except re.error:
+                self.log(f"잘못된 정규식: {keyword}")
+                return False
+        return False
+        
     def find_matching_files(self, preview=False):
         source = self.source_var.get()
         if not source or not os.path.exists(source):
             messagebox.showerror("오류", "유효한 대상 폴더를 선택하세요.")
             return []
             
-        if not self.rules:
-            messagebox.showwarning("경고", "분류 규칙이 없습니다.")
+        # 활성화된 규칙만 필터링
+        active_rules = {k: v for k, v in self.rules.items() 
+                       if isinstance(v, dict) and v.get('enabled', True)}
+        
+        if not active_rules:
+            messagebox.showwarning("경고", "활성화된 분류 규칙이 없습니다.")
             return []
             
         matches = []
@@ -255,21 +369,25 @@ class FileOrganizer:
             for root, dirs, files in os.walk(source):
                 for file in files:
                     file_path = os.path.join(root, file)
-                    for keyword, dest in self.rules.items():
-                        if keyword.lower() in file.lower():
-                            matches.append((file_path, dest, keyword))
+                    for keyword, rule_data in active_rules.items():
+                        dest = rule_data.get('dest', '')
+                        match_mode = rule_data.get('match_mode', '포함')
+                        if self.match_file(file_path, keyword, match_mode):
+                            matches.append((file_path, dest, keyword, match_mode))
                             if preview:
-                                self.log(f"매칭: {file} → {dest} (키워드: {keyword})")
+                                self.log(f"매칭: {file} → {dest} (키워드: {keyword}, 모드: {match_mode})")
                             break
         else:
             for file in os.listdir(source):
                 file_path = os.path.join(source, file)
                 if os.path.isfile(file_path):
-                    for keyword, dest in self.rules.items():
-                        if keyword.lower() in file.lower():
-                            matches.append((file_path, dest, keyword))
+                    for keyword, rule_data in active_rules.items():
+                        dest = rule_data.get('dest', '')
+                        match_mode = rule_data.get('match_mode', '포함')
+                        if self.match_file(file_path, keyword, match_mode):
+                            matches.append((file_path, dest, keyword, match_mode))
                             if preview:
-                                self.log(f"매칭: {file} → {dest} (키워드: {keyword})")
+                                self.log(f"매칭: {file} → {dest} (키워드: {keyword}, 모드: {match_mode})")
                             break
                             
         return matches
@@ -277,6 +395,13 @@ class FileOrganizer:
     def preview_files(self):
         self.log_text.delete(1.0, tk.END)
         self.log("=== 미리보기 시작 ===")
+        
+        # 활성화된 규칙 수 확인
+        active_count = sum(1 for r in self.rules.values() 
+                          if isinstance(r, dict) and r.get('enabled', True))
+        total_count = len(self.rules)
+        
+        self.log(f"활성 규칙: {active_count}/{total_count}개")
         
         # 진행률 초기화
         self.update_progress(0, 0, "파일 검색 중...")
@@ -324,7 +449,7 @@ class FileOrganizer:
         
         self.log(f"총 {total_files}개 파일을 처리합니다.")
         
-        for i, (file_path, dest_folder, keyword) in enumerate(matches, 1):
+        for i, (file_path, dest_folder, keyword, match_mode) in enumerate(matches, 1):
             try:
                 # 진행률 업데이트
                 file_name = os.path.basename(file_path)
@@ -353,7 +478,7 @@ class FileOrganizer:
                 else:
                     shutil.move(file_path, dest_path)
                     
-                self.log(f"{operation} 완료: {file_name} → {dest_folder}")
+                self.log(f"{operation} 완료: {file_name} → {dest_folder} (규칙: {keyword}/{match_mode})")
                 success_count += 1
                 
             except Exception as e:

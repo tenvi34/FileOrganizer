@@ -31,6 +31,11 @@ class FileOrganizer:
 
         # UI 설정
         self.setup_ui()
+        
+        # 로그 폴더 생성
+        self.log_dir = "logs"
+        if not os.path.exists(self.log_dir):
+            os.makedirs(self.log_dir)
 
     def setup_ui(self):
         # 메인 프레임
@@ -282,14 +287,17 @@ class FileOrganizer:
             # 삭제 모드일 때는 복사 옵션 비활성화
             self.copy_var.set(False)
             self.copy_check.config(state="disabled")
-            # 영구 삭제 모드 활성화
+            # 영구 삭제 옵션 활성화
             self.permanent_check.config(state="normal")
         else:
-            # 삭제 모드가 아닐 때는 영구 삭제 모드 비활성화
+            # 삭제 모드가 아닐 때는 영구 삭제 옵션 비활성화
             self.permanent_delete_var.set(False)
             self.permanent_check.config(state="disabled")
-            # 복사 모드 활성화
+            # 복사 옵션 활성화
             self.copy_check.config(state="normal")
+        
+        # TreeView 업데이트하여 대상 폴더 표시 변경
+        self.update_rule_list()
 
     def select_all_rules(self):
         """모든 규칙 선택"""
@@ -379,8 +387,18 @@ class FileOrganizer:
                 enabled = rule_data.get("enabled", True)
 
             check_mark = "✓" if enabled else ""
+
+            # 삭제 모드일 때 대상 폴더 표시 변경
+            if self.delete_var.get():
+                dest_display = "(삭제 모드 - 폴더 불필요)"
+            else:
+                dest_display = dest
+
             self.tree.insert(
-                "", "end", text=str(i), values=(check_mark, keyword, match_mode, dest)
+                "",
+                "end",
+                text=str(i),
+                values=(check_mark, keyword, match_mode, dest_display),
             )
 
     def load_config(self):
@@ -494,14 +512,15 @@ class FileOrganizer:
             for file in os.listdir(source):
                 file_path = os.path.join(source, file)
                 if os.path.isfile(file_path):
-                    
+
                     # 심볼릭 링크 제외
                     if os.path.islink(file_path):
                         continue
-                    
+
                     # 시스템/숨김 파일 확인 (Windows)
-                    if os.name == 'nt':
+                    if os.name == "nt":
                         import ctypes
+
                         FILE_ATTRIBUTE_HIDDEN = 0x02
                         FILE_ATTRIBUTE_SYSTEM = 0x04
                         try:
@@ -512,16 +531,18 @@ class FileOrganizer:
                                 continue
                         except:
                             pass
-                    
+
                     for keyword, rule_data in active_rules.items():
                         dest = rule_data.get("dest", "")
                         match_mode = rule_data.get("match_mode", "포함")
                         if self.match_file(file_path, keyword, match_mode):
                             matches.append((file_path, dest, keyword, match_mode))
                             if preview:
-                                self.log(
-                                    f"매칭: {file} → {dest} (키워드: {keyword}, 모드: {match_mode})"
-                                )
+                                if self.delete_var.get():
+                                    delete_type = "영구 삭제" if self.permanent_delete_var.get() else "휴지통"
+                                    self.log(f"매칭: {file} → {delete_type} (키워드: {keyword}, 모드: {match_mode})")
+                                else:
+                                    self.log(f"매칭: {file} → {dest} (키워드: {keyword}, 모드: {match_mode})")
                             break
 
         return matches
@@ -570,7 +591,7 @@ class FileOrganizer:
         self.update_progress(0, 0, "미리보기 완료")
 
     def organize_files(self):
-        
+
         # 환경 검증
         is_valid, warnings = self.validate_before_operation()
         if warnings:
@@ -579,9 +600,11 @@ class FileOrganizer:
                 messagebox.showerror("오류", warning_msg)
                 return
             else:
-                if not messagebox.askyesno("경고", f"{warning_msg}\n\n계속하시겠습니까?"):
+                if not messagebox.askyesno(
+                    "경고", f"{warning_msg}\n\n계속하시겠습니까?"
+                ):
                     return
-        
+
         # 매칭되는 파일 수 미리 확인
         matches = self.find_matching_files()
         if not matches:
@@ -653,13 +676,49 @@ class FileOrganizer:
                 self.update_progress(i, total_files, f"처리 중: {file_name}")
 
                 if is_delete:
-                    # 삭제 모드
-                    if is_permanent:
-                        os.remove(file_path)
-                    else:
-                        send2trash.send2trash(file_path)
-                    self.log(f"{operation} 완료: {file_name}")
-                    success_count += 1
+                    # 삭제 모드 - 대상 폴더 무시
+                    try:
+                        # 파일 존재 여부 먼저 확인
+                        if not os.path.exists(file_path):
+                            self.log(f"❌ 파일이 존재하지 않음: {file_name}")
+                            self.log(f"   경로: {file_path}")
+                            error_count += 1
+                            continue
+                            
+                        if is_permanent:
+                            # 영구 삭제
+                            try:
+                                os.remove(file_path)
+                                self.log(f"{operation} 완료: {file_name} (규칙: {keyword})")
+                                success_count += 1
+                            except Exception as e:
+                                # Windows 긴 경로 문제일 수 있으므로 다시 시도
+                                try:
+                                    import subprocess
+                                    # Windows del 명령 사용
+                                    subprocess.run(['cmd', '/c', 'del', '/f', '/q', file_path], 
+                                                check=True, capture_output=True, text=True)
+                                    self.log(f"{operation} 완료: {file_name} (규칙: {keyword})")
+                                    success_count += 1
+                                except:
+                                    self.log(f"❌ {operation} 실패: {file_name} - {str(e)}")
+                                    error_count += 1
+                        else:
+                            # 휴지통으로 이동
+                            try:
+                                # send2trash는 정규화된 경로 필요
+                                normalized_path = os.path.normpath(file_path)
+                                send2trash.send2trash(normalized_path)
+                                self.log(f"{operation} 완료: {file_name} (규칙: {keyword})")
+                                success_count += 1
+                            except Exception as e:
+                                self.log(f"❌ {operation} 실패: {file_name} - {type(e).__name__}: {str(e)}")
+                                self.log(f"   경로: {file_path}")
+                                error_count += 1
+                                
+                    except Exception as e:
+                        self.log(f"❌ 예외 발생: {file_name} - {type(e).__name__}: {str(e)}")
+                        error_count += 1
                 else:
                     # 복사/이동 모드
                     # 대상 폴더가 없으면 생성
@@ -697,20 +756,25 @@ class FileOrganizer:
         self.log(f"\n=== 작업 완료 ===")
         self.log(f"성공: {success_count}개 파일")
         self.log(f"실패: {error_count}개 파일")
-        
+
         # 실패한 파일이 있으면 로그 자동 저장
         if error_count > 0:
-            error_log_path = f"file_organizer_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            error_log_path = os.path.join(
+                self.log_dir,
+                f"file_organizer_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            )
             try:
-                with open(error_log_path, 'w', encoding='utf-8') as f:
+                with open(error_log_path, "w", encoding="utf-8") as f:
                     f.write(self.log_text.get(1.0, tk.END))
                 self.log(f"\n오류 로그가 저장되었습니다: {error_log_path}")
             except:
                 pass
-            
+
         # 진행률 완료
         if error_count > 0:
-            self.update_progress(total_files, total_files, f"작업 완료! (실패: {error_count}개)")
+            self.update_progress(
+                total_files, total_files, f"작업 완료! (실패: {error_count}개)"
+            )
         else:
             self.update_progress(total_files, total_files, "작업 완료!")
 
@@ -723,6 +787,20 @@ class FileOrganizer:
             ),
         )
 
+    def safe_path(self, path):
+        """안전한 경로 변환"""
+        if os.name == "nt":
+            # Windows에서만 처리
+            path = path.replace("/", "\\")
+            abs_path = os.path.abspath(path)
+            # 이미 \\?\ 로 시작하면 그대로 반환
+            if abs_path.startswith("\\\\?\\"):
+                return abs_path
+            # 긴 경로인 경우에만 \\?\ 추가
+            if len(abs_path) > 260:
+                return "\\\\?\\" + abs_path
+        return path
+
     def clear_log(self):
         """로그 내용 지우기"""
         self.log_text.delete(1.0, tk.END)
@@ -730,11 +808,19 @@ class FileOrganizer:
 
     def save_log(self):
         """로그를 파일로 저장"""
+        # 로그 폴더에 저장하도록 기본 경로 설정
+        default_filename = os.path.join(
+            self.log_dir,
+            f"file_organizer_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        )
+        
         filename = filedialog.asksaveasfilename(
             defaultextension=".txt",
+            initialdir=self.log_dir,  # 기본 폴더를 로그 폴더로
             filetypes=[("텍스트 파일", "*.txt"), ("모든 파일", "*.*")],
-            initialfile=f"file_organizer_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            initialfile=os.path.basename(default_filename)
         )
+        
         if filename:
             try:
                 with open(filename, "w", encoding="utf-8") as f:
@@ -802,48 +888,55 @@ class FileOrganizer:
         self.root.clipboard_clear()
         self.root.clipboard_append(self.log_text.get(1.0, tk.END))
         messagebox.showinfo("복사 완료", "로그가 클립보드에 복사되었습니다.")
-        
+
     def validate_before_operation(self):
         """작업 전 환경 검증"""
         source = self.source_var.get()
         warnings = []
-        
+
         # 1. 소스 폴더 검증
         if not source or not os.path.exists(source):
             return False, ["대상 폴더가 존재하지 않습니다."]
-        
+
         # 2. 쓰기 권한 검증 (이동/삭제 모드)
         if not self.copy_var.get():
             try:
                 test_file = os.path.join(source, ".write_test_temp")
-                with open(test_file, 'w') as f:
+                with open(test_file, "w") as f:
                     f.write("test")
                 os.remove(test_file)
             except:
-                warnings.append("⚠️ 대상 폴더에 쓰기 권한이 없습니다. 관리자 권한으로 실행하세요.")
-                
+                warnings.append(
+                    "⚠️ 대상 폴더에 쓰기 권한이 없습니다. 관리자 권한으로 실행하세요."
+                )
+
         # 3. 대상 폴더를 검증 (삭제모드가 아닐 경우)
         if not self.delete_var.get():
             for keyword, rule_data in self.rules.items():
-                if isinstance(rule_data, dict) and rule_data.get('enabled', True):
-                    dest = rule_data.get('dest', '')
+                if isinstance(rule_data, dict) and rule_data.get("enabled", True):
+                    dest = rule_data.get("dest", "")
                     if dest and not os.path.exists(dest):
                         try:
                             os.makedirs(dest)
                         except Exception as e:
                             warnings.append(f"⚠️ 폴더 생성 실패: {dest} - {str(e)}")
-                            
+
         # 4. 디스크 공간 확인 (복사모드)
         if self.copy_var.get():
             try:
                 import shutil
-                total_size = sum(os.path.getsize(f[0]) for f in self.find_matching_files())
+
+                total_size = sum(
+                    os.path.getsize(f[0]) for f in self.find_matching_files()
+                )
                 free_space = shutil.disk_usage(source).free
                 if total_size > free_space * 0.9:  # 90% 이상 사용 시 경고
-                    warnings.append(f"⚠️ 디스크 공간 부족 가능성 (필요: {total_size//1024//1024}MB)")
+                    warnings.append(
+                        f"⚠️ 디스크 공간 부족 가능성 (필요: {total_size//1024//1024}MB)"
+                    )
             except:
                 pass
-        
+
         return len(warnings) == 0, warnings
 
 

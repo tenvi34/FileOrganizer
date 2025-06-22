@@ -29,3 +29,6 @@ Thumbs.db
 
 # 로그
 *.log
+
+# 파이썬 버전
+.python-version

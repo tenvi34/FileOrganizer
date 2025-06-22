@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# PyInstaller
+*.manifest
+*.spec
+build/
+dist/
+
+# 설정 파일
+file_organizer_config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 로그 관련
+logs/
+log/
+*.log
+*.txt
+file_organizer_errors_*.txt
+file_organizer_log_*.txt
+
+# 파이썬 버전
+.python-version
+
+# 테스트 폴더
+테스트/
+test/

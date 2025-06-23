@@ -438,6 +438,7 @@ def run_quick_test():
 
 if __name__ == "__main__":
     import sys
+    sys.stdout.reconfigure(encoding='utf-8')
 
     if len(sys.argv) > 1 and sys.argv[1] == "--quick":
         # 빠른 테스트

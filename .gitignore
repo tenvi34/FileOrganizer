@@ -31,7 +31,7 @@ Thumbs.db
 logs/
 log/
 *.log
-*.txt
+# *.txt
 file_organizer_errors_*.txt
 file_organizer_log_*.txt
 

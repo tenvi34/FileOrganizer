@@ -1,0 +1,20 @@
+file_organizer/
+├── main.py                    # 진입점
+├── src/
+│   ├── __init__.py
+│   ├── app.py                 # 애플리케이션 클래스
+│   ├── constants.py           # 상수 정의
+│   ├── core/                  # 핵심 비즈니스 로직
+│   │   ├── __init__.py
+│   │   ├── file_matcher.py    # 파일 매칭
+│   │   ├── file_processor.py  # 파일 처리
+│   │   └── rule_manager.py    # 규칙 관리
+│   ├── ui/                    # UI 관련
+│   │   ├── __init__.py
+│   │   ├── main_window.py     # 메인 윈도우
+│   │   └── dialogs.py         # 대화상자
+│   └── utils/                 # 유틸리티
+│       ├── __init__.py
+│       ├── config.py          # 설정 관리
+│       ├── logger.py          # 로그 관리
+│       └── validators.py      # 검증 함수

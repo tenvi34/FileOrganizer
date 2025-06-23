@@ -3,6 +3,7 @@
 
 import os
 import shutil
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
@@ -31,7 +32,7 @@ class FileOrganizer:
 
         # UI 설정
         self.setup_ui()
-        
+
         # 로그 폴더 생성
         self.log_dir = "logs"
         if not os.path.exists(self.log_dir):
@@ -295,7 +296,7 @@ class FileOrganizer:
             self.permanent_check.config(state="disabled")
             # 복사 옵션 활성화
             self.copy_check.config(state="normal")
-        
+
         # TreeView 업데이트하여 대상 폴더 표시 변경
         self.update_rule_list()
 
@@ -434,7 +435,7 @@ class FileOrganizer:
         self.root.update()
 
     def update_progress(self, current, total, message=""):
-        """진행률 업데이트"""
+        """최적화된 진행률 업데이트 - 과도한 UI 업데이트 방지 -2025.06.23-"""
         if total > 0:
             progress = (current / total) * 100
             self.progress_var.set(progress)
@@ -444,7 +445,9 @@ class FileOrganizer:
         else:
             self.progress_var.set(0)
             self.progress_label.config(text=message)
-        self.root.update()
+
+        # update_idletasks()는 update()보다 가벼움
+        self.root.update_idletasks()
 
     def match_file(self, filename, keyword, match_mode):
         """파일명과 키워드 매칭"""
@@ -469,24 +472,22 @@ class FileOrganizer:
                 return False
         return False
 
-    def find_matching_files(self, preview=False):
+    def find_matching_files_generator(self, preview=False):
+        """파일을 제너레이터로 반환하여 메모리 효율 개선"""
         source = self.source_var.get()
         if not source or not os.path.exists(source):
-            messagebox.showerror("오류", "유효한 대상 폴더를 선택하세요.")
-            return []
+            return
 
         # 활성화된 규칙만 필터링
         active_rules = {
             k: v
             for k, v in self.rules.items()
-            if isinstance(v, dict) and v.get("enabled", True)
+            if (isinstance(v, dict) and v.get("enabled", True))
         }
 
         if not active_rules:
-            messagebox.showwarning("경고", "활성화된 분류 규칙이 없습니다.")
-            return []
+            return
 
-        matches = []
         include_subfolders = self.subfolder_var.get()
 
         # 파일 검색
@@ -498,21 +499,12 @@ class FileOrganizer:
                         dest = rule_data.get("dest", "")
                         match_mode = rule_data.get("match_mode", "포함")
                         if self.match_file(file_path, keyword, match_mode):
-                            matches.append((file_path, dest, keyword, match_mode))
-                            if preview:
-                                if self.delete_var.get():
-                                    action = "삭제 예정"
-                                else:
-                                    action = f"이동 → {dest}"
-                                self.log(
-                                    f"매칭: {file} {action} (키워드: {keyword}, 모드: {match_mode})"
-                                )
+                            yield (file_path, dest, keyword, match_mode)
                             break
         else:
             for file in os.listdir(source):
                 file_path = os.path.join(source, file)
                 if os.path.isfile(file_path):
-
                     # 심볼릭 링크 제외
                     if os.path.islink(file_path):
                         continue
@@ -525,9 +517,7 @@ class FileOrganizer:
                         FILE_ATTRIBUTE_SYSTEM = 0x04
                         try:
                             attrs = ctypes.windll.kernel32.GetFileAttributesW(file_path)
-                            if attrs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM):
-                                if preview:
-                                    self.log(f"건너뜀: {file} (시스템/숨김 파일)")
+                            if attrs & (FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN):
                                 continue
                         except:
                             pass
@@ -536,18 +526,11 @@ class FileOrganizer:
                         dest = rule_data.get("dest", "")
                         match_mode = rule_data.get("match_mode", "포함")
                         if self.match_file(file_path, keyword, match_mode):
-                            matches.append((file_path, dest, keyword, match_mode))
-                            if preview:
-                                if self.delete_var.get():
-                                    delete_type = "영구 삭제" if self.permanent_delete_var.get() else "휴지통"
-                                    self.log(f"매칭: {file} → {delete_type} (키워드: {keyword}, 모드: {match_mode})")
-                                else:
-                                    self.log(f"매칭: {file} → {dest} (키워드: {keyword}, 모드: {match_mode})")
+                            yield (file_path, dest, keyword, match_mode)
                             break
 
-        return matches
-
     def preview_files(self):
+        """최적화된 미리보기 -2025.06.23-"""
         self.log_text.delete(1.0, tk.END)
         self.log("=== 미리보기 시작 ===")
 
@@ -564,24 +547,51 @@ class FileOrganizer:
         # 진행률 초기화
         self.update_progress(0, 0, "파일 검색 중...")
 
-        matches = self.find_matching_files(preview=True)
+        # 제너레이터로 파일 수만 빠르게 카운트
+        match_count = 0
+        preview_limit = 100  # 미리보기는 처음 100개만 표시
 
-        if matches:
+        for i, (file_path, dest, keyword, match_mode) in enumerate(
+            self.find_matching_files_generator()
+        ):
+            match_count += 1
+
+            # 처음 100개만 로그에 표시
+            if i < preview_limit:
+                file_name = os.path.basename(file_path)
+                if self.delete_var.get():
+                    delete_type = (
+                        "영구 삭제" if self.permanent_delete_var.get() else "휴지통"
+                    )
+                    self.log(
+                        f"매칭: {file_name} → {delete_type} (키워드: {keyword}, 모드: {match_mode})"
+                    )
+                else:
+                    self.log(
+                        f"매칭: {file_name} → {dest} (키워드: {keyword}, 모드: {match_mode})"
+                    )
+            elif i == preview_limit:
+                self.log(
+                    f"\n... 그리고 {match_count - preview_limit}개 더 있습니다 ..."
+                )
+
+        if match_count > 0:
             if self.delete_var.get():
                 delete_type = (
                     "영구 삭제"
                     if self.permanent_delete_var.get()
                     else "휴지통으로 이동"
                 )
-                self.log(f"\n⚠️ 총 {len(matches)}개 파일이 {delete_type}될 예정입니다.")
+                self.log(f"\n⚠️ 총 {match_count}개 파일이 {delete_type}될 예정입니다.")
             else:
                 action = "복사" if self.copy_var.get() else "이동"
-                self.log(f"\n총 {len(matches)}개 파일이 {action}될 예정입니다.")
+                self.log(f"\n총 {match_count}개 파일이 {action}될 예정입니다.")
+
             # 많은 파일이 있을 경우 별도 창 열기 제안
-            if len(matches) > 50:
+            if match_count > 50:
                 if messagebox.askyesno(
                     "많은 파일",
-                    f"{len(matches)}개의 파일이 발견되었습니다.\n별도 창에서 로그를 보시겠습니까?",
+                    f"{match_count}개의 파일이 발견되었습니다.\n별도 창에서 로그를 보시겠습니까?",
                 ):
                     self.open_log_window()
         else:
@@ -591,7 +601,6 @@ class FileOrganizer:
         self.update_progress(0, 0, "미리보기 완료")
 
     def organize_files(self):
-
         # 환경 검증
         is_valid, warnings = self.validate_before_operation()
         if warnings:
@@ -642,13 +651,13 @@ class FileOrganizer:
         thread.start()
 
     def _organize_files_thread(self):
+        """최적화된 파일 정리 스레드(처리 속도 향상) -2025.06.23-"""
         self.log_text.delete(1.0, tk.END)
         self.log("=== 파일 정리 시작 ===")
 
         # 진행률 초기화
         self.update_progress(0, 0, "파일 검색 중...")
 
-        matches = self.find_matching_files()
         is_copy = self.copy_var.get()
         is_delete = self.delete_var.get()
         is_permanent = self.permanent_delete_var.get()
@@ -660,8 +669,21 @@ class FileOrganizer:
 
         success_count = 0
         error_count = 0
-        total_files = len(matches)
+        processed_count = 0
 
+        # batch 처리 설정
+        BATCH_SIZE = 100
+        batch = []
+
+        # UI 업데이트 주기 설정 (0.1초마다)
+        last_update_time = time.time()
+        UPDATE_INTERVAL = 0.1
+
+        # 제너레이터로 파일 처리
+        file_generator = self.find_matching_files_generator()
+
+        # 전체 파일 수를 미리 계산 (Progress Bar)
+        total_files = sum(1 for _ in self.find_matching_files_generator())
         if total_files == 0:
             self.log("매칭되는 파일이 없습니다.")
             self.update_progress(0, 0, "완료 - 매칭 파일 없음")
@@ -669,56 +691,124 @@ class FileOrganizer:
 
         self.log(f"총 {total_files}개 파일을 처리합니다.")
 
-        for i, (file_path, dest_folder, keyword, match_mode) in enumerate(matches, 1):
+        # 다시 제너레이터 생성
+        file_generator = self.find_matching_files_generator()
+
+        for file_path, dest_folder, keyword, match_mode in file_generator:
+            batch.append((file_path, dest_folder, keyword, match_mode))
+
+            # batch가 가득 차거나 마지막 파일인 경우에 처리
+            if len(batch) >= BATCH_SIZE:
+                success, error = self._process_batch(
+                    batch, is_delete, is_permanent, is_copy, operation
+                )
+                success_count += success
+                error_count += error
+                processed_count += len(batch)
+
+                # UI 업데이트(주기적으로)
+                current_time = time.time()
+                if current_time - last_update_time >= UPDATE_INTERVAL:
+                    self.update_progress(processed_count, total_files, f"처리 중...")
+                    last_update_time = current_time
+
+                batch = []
+
+        # 남은 파일 처리
+        if batch:
+            success, error = self._process_batch(
+                batch, is_delete, is_permanent, is_copy, operation
+            )
+            success_count += success
+            error_count += error
+            processed_count += len(batch)
+
+        self.log(f"\n=== 작업 완료 ===")
+        self.log(f"성공: {success_count}개 파일")
+        self.log(f"실패: {error_count}개 파일")
+
+        # 실패한 파일이 있으면 로그 자동 저장
+        if error_count > 0:
+            error_log_path = os.path.join(
+                self.log_dir,
+                f"file_organizer_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+            )
             try:
-                # 진행률 업데이트
+                with open(error_log_path, "w", encoding="utf-8") as f:
+                    f.write(self.log_text.get(1.0, tk.END))
+                self.log(f"\n오류 로그가 저장되었습니다: {error_log_path}")
+            except:
+                pass
+
+        # 진행률 완료
+        if error_count > 0:
+            self.update_progress(
+                total_files, total_files, f"작업 완료! (실패: {error_count}개)"
+            )
+        else:
+            self.update_progress(total_files, total_files, "작업 완료!")
+
+        # 메인 스레드에서 메시지박스 표시
+        self.root.after(
+            0,
+            lambda: messagebox.showinfo(
+                "완료",
+                f"파일 정리가 완료되었습니다.\n\n성공: {success_count}개\n실패: {error_count}개",
+            ),
+        )
+
+    def _process_batch(self, batch, is_delete, is_permanent, is_copy, operation):
+        """batch 단위로 파일 처리"""
+        success_count = 0
+        error_count = 0
+
+        for file_path, dest_folder, keyword, match_mode in batch:
+            try:
                 file_name = os.path.basename(file_path)
-                self.update_progress(i, total_files, f"처리 중: {file_name}")
 
                 if is_delete:
-                    # 삭제 모드 - 대상 폴더 무시
-                    try:
-                        # 파일 존재 여부 먼저 확인
-                        if not os.path.exists(file_path):
-                            self.log(f"❌ 파일이 존재하지 않음: {file_name}")
-                            self.log(f"   경로: {file_path}")
-                            error_count += 1
-                            continue
-                            
-                        if is_permanent:
-                            # 영구 삭제
-                            try:
-                                os.remove(file_path)
-                                self.log(f"{operation} 완료: {file_name} (규칙: {keyword})")
-                                success_count += 1
-                            except Exception as e:
-                                # Windows 긴 경로 문제일 수 있으므로 다시 시도
-                                try:
-                                    import subprocess
-                                    # Windows del 명령 사용
-                                    subprocess.run(['cmd', '/c', 'del', '/f', '/q', file_path], 
-                                                check=True, capture_output=True, text=True)
-                                    self.log(f"{operation} 완료: {file_name} (규칙: {keyword})")
-                                    success_count += 1
-                                except:
-                                    self.log(f"❌ {operation} 실패: {file_name} - {str(e)}")
-                                    error_count += 1
-                        else:
-                            # 휴지통으로 이동
-                            try:
-                                # send2trash는 정규화된 경로 필요
-                                normalized_path = os.path.normpath(file_path)
-                                send2trash.send2trash(normalized_path)
-                                self.log(f"{operation} 완료: {file_name} (규칙: {keyword})")
-                                success_count += 1
-                            except Exception as e:
-                                self.log(f"❌ {operation} 실패: {file_name} - {type(e).__name__}: {str(e)}")
-                                self.log(f"   경로: {file_path}")
-                                error_count += 1
-                                
-                    except Exception as e:
-                        self.log(f"❌ 예외 발생: {file_name} - {type(e).__name__}: {str(e)}")
+                    # 삭제 모드
+                    if not os.path.exists(file_path):
+                        self.log(f"❌ 파일이 존재하지 않음: {file_name}")
                         error_count += 1
+                        continue
+
+                    if is_permanent:
+                        # 영구 삭제
+                        try:
+                            os.remove(file_path)
+                            self.log(f"{operation} 완료: {file_name} (규칙: {keyword})")
+                            success_count += 1
+                        except Exception as e:
+                            # Windows 긴 경로 문제일 수 있으므로 다시 시도
+                            try:
+                                import subprocess
+
+                                subprocess.run(
+                                    ["cmd", "/c", "del", "/f", "/q", file_path],
+                                    check=True,
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                self.log(
+                                    f"{operation} 완료: {file_name} (규칙: {keyword})"
+                                )
+                                success_count += 1
+                            except:
+                                self.log(f"❌ {operation} 실패: {file_name} - {str(e)}")
+                                error_count += 1
+                    else:
+                        # 휴지통으로 이동
+                        try:
+                            normalized_path = os.path.normpath(file_path)
+                            send2trash.send2trash(normalized_path)
+                            self.log(f"{operation} 완료: {file_name} (규칙: {keyword})")
+                            success_count += 1
+                        except Exception as e:
+                            self.log(
+                                f"❌ {operation} 실패: {file_name} - {type(e).__name__}: {str(e)}"
+                            )
+                            error_count += 1
                 else:
                     # 복사/이동 모드
                     # 대상 폴더가 없으면 생성
@@ -750,42 +840,10 @@ class FileOrganizer:
                     success_count += 1
 
             except Exception as e:
-                self.log(f"오류 발생: {file_name} - {str(e)}")
+                self.log(f"오류 발생: {os.path.basename(file_path)} - {str(e)}")
                 error_count += 1
 
-        self.log(f"\n=== 작업 완료 ===")
-        self.log(f"성공: {success_count}개 파일")
-        self.log(f"실패: {error_count}개 파일")
-
-        # 실패한 파일이 있으면 로그 자동 저장
-        if error_count > 0:
-            error_log_path = os.path.join(
-                self.log_dir,
-                f"file_organizer_errors_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-            )
-            try:
-                with open(error_log_path, "w", encoding="utf-8") as f:
-                    f.write(self.log_text.get(1.0, tk.END))
-                self.log(f"\n오류 로그가 저장되었습니다: {error_log_path}")
-            except:
-                pass
-
-        # 진행률 완료
-        if error_count > 0:
-            self.update_progress(
-                total_files, total_files, f"작업 완료! (실패: {error_count}개)"
-            )
-        else:
-            self.update_progress(total_files, total_files, "작업 완료!")
-
-        # 메인 스레드에서 메시지박스 표시
-        self.root.after(
-            0,
-            lambda: messagebox.showinfo(
-                "완료",
-                f"파일 정리가 완료되었습니다.\n\n성공: {success_count}개\n실패: {error_count}개",
-            ),
-        )
+        return success_count, error_count
 
     def safe_path(self, path):
         """안전한 경로 변환"""
@@ -811,16 +869,16 @@ class FileOrganizer:
         # 로그 폴더에 저장하도록 기본 경로 설정
         default_filename = os.path.join(
             self.log_dir,
-            f"file_organizer_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+            f"file_organizer_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
         )
-        
+
         filename = filedialog.asksaveasfilename(
             defaultextension=".txt",
             initialdir=self.log_dir,  # 기본 폴더를 로그 폴더로
             filetypes=[("텍스트 파일", "*.txt"), ("모든 파일", "*.*")],
-            initialfile=os.path.basename(default_filename)
+            initialfile=os.path.basename(default_filename),
         )
-        
+
         if filename:
             try:
                 with open(filename, "w", encoding="utf-8") as f:

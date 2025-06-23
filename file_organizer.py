@@ -6,7 +6,6 @@ import shutil
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from pathlib import Path
 import json
 from datetime import datetime
 import threading
@@ -519,7 +518,7 @@ class FileOrganizer:
                             attrs = ctypes.windll.kernel32.GetFileAttributesW(file_path)
                             if attrs & (FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_HIDDEN):
                                 continue
-                        except:
+                        except:  # noqa: E722
                             pass
 
                     for keyword, rule_data in active_rules.items():
@@ -709,7 +708,7 @@ class FileOrganizer:
                 # UI 업데이트(주기적으로)
                 current_time = time.time()
                 if current_time - last_update_time >= UPDATE_INTERVAL:
-                    self.update_progress(processed_count, total_files, f"처리 중...")
+                    self.update_progress(processed_count, total_files, "처리 중...")
                     last_update_time = current_time
 
                 batch = []
@@ -723,7 +722,7 @@ class FileOrganizer:
             error_count += error
             processed_count += len(batch)
 
-        self.log(f"\n=== 작업 완료 ===")
+        self.log("\n=== 작업 완료 ===")
         self.log(f"성공: {success_count}개 파일")
         self.log(f"실패: {error_count}개 파일")
 
@@ -737,7 +736,7 @@ class FileOrganizer:
                 with open(error_log_path, "w", encoding="utf-8") as f:
                     f.write(self.log_text.get(1.0, tk.END))
                 self.log(f"\n오류 로그가 저장되었습니다: {error_log_path}")
-            except:
+            except:  # noqa: E722
                 pass
 
         # 진행률 완료
@@ -794,7 +793,7 @@ class FileOrganizer:
                                     f"{operation} 완료: {file_name} (규칙: {keyword})"
                                 )
                                 success_count += 1
-                            except:
+                            except:  # noqa: E722
                                 self.log(f"❌ {operation} 실패: {file_name} - {str(e)}")
                                 error_count += 1
                     else:
@@ -963,7 +962,7 @@ class FileOrganizer:
                 with open(test_file, "w") as f:
                     f.write("test")
                 os.remove(test_file)
-            except:
+            except:  # noqa: E722
                 warnings.append(
                     "⚠️ 대상 폴더에 쓰기 권한이 없습니다. 관리자 권한으로 실행하세요."
                 )
@@ -992,7 +991,7 @@ class FileOrganizer:
                     warnings.append(
                         f"⚠️ 디스크 공간 부족 가능성 (필요: {total_size//1024//1024}MB)"
                     )
-            except:
+            except:  # noqa: E722
                 pass
 
         return len(warnings) == 0, warnings
@@ -1000,7 +999,7 @@ class FileOrganizer:
 
 def main():
     root = tk.Tk()
-    app = FileOrganizer(root)
+    FileOrganizer(root)
     root.mainloop()
 
 

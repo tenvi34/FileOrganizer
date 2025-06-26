@@ -20,7 +20,7 @@ class FileOrganizer:
         self.root.geometry("1000x850")
 
         # 설정 파일 경로
-        self.config_file = "file_organizer_config.json"
+        self.config_file = "config/file_organizer_config.json"
         self.rules = self.load_config()
 
         # 로그 창 변수

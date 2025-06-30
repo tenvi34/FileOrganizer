@@ -27,7 +27,7 @@ jobs:
     
     - name: Build executable
       run: |
-        pyinstaller --onefile --windowed --noupx --name "FileOrganizer" --icon=NONE file_organizer.py
+        pyinstaller --onefile --windowed --noupx --name "FileOrganizer" --add-data "src;src" main.py
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4

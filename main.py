@@ -6,11 +6,11 @@
 메인 진입점
 """
 
-from src.app import FileOrgaizerApp
+from src.app import FileOrganizerApp
 
 def main():
     """메인 함수"""
-    app = FileOrgaizerApp()
+    app = FileOrganizerApp()
     app.run()
     
 if __name__ == "__main__":

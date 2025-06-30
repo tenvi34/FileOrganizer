@@ -9,7 +9,7 @@
 import tkinter as tk
 from src.ui.main_window import MainWindow
 
-class FileOrgnizeApp:
+class FileOrganizerApp:
     """메인 애플리케이션 클래스"""
 
     def __init__(self):

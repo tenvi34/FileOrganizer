@@ -63,15 +63,21 @@ class FileMatcher:
             return True
 
         # Windows 시스템/숨김 파일 확인
-        if os.name == "nt" and FILE_ATTRIBUTE_HIDDEN is not None:
+        if os.name == "nt":  # Windows만
             try:
                 import ctypes
-
+                FILE_ATTRIBUTE_HIDDEN = 0x02
+                FILE_ATTRIBUTE_SYSTEM = 0x04
                 attrs = ctypes.windll.kernel32.GetFileAttributesW(file_path)
                 if attrs & (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM):
                     return True
-            except:  # noqa: E722
+            except:
                 pass
+        
+        # macOS/Linux 숨김 파일 확인 (. 으로 시작)
+        elif os.name == "posix":
+            if os.path.basename(file_path).startswith('.'):
+                return True
 
         return False
 

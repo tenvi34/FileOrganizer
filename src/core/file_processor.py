@@ -103,8 +103,12 @@ class FileProcessor:
                 if os.name == "nt":
                     try:
                         import subprocess
-                        subprocess.run(['cmd', '/c', 'del', '/f', '/q', file_path], 
-                                     check=True, capture_output=True, text=True)
+                        if os.name == "nt":
+                            # Windows
+                            subprocess.run(['cmd', '/c', 'del', '/f', '/q', file_path], ...)
+                        else:
+                            # macOS/Linux - 그냥 os.remove 사용
+                            os.remove(file_path)
                         return True
                     except:  # noqa: E722
                         pass
@@ -207,4 +211,4 @@ class FileProcessor:
             # 긴 경로인 경우에만 \\?\ 추가
             if len(abs_path) > 260:
                 return "\\\\?\\" + abs_path
-        return path
+        return os.path.abspath(path)

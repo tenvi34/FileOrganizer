@@ -47,6 +47,16 @@ def check_requirements():
             missing_packages.append(package)
             print(f"  ✗ {package} 미설치")
     
+    # macOS에서 tkinter 확인
+    if sys.platform == "darwin":
+        try:
+            import tkinter
+            print(f"  ✓ tkinter 설치됨")
+        except ImportError:
+            print(f"  ✗ tkinter 미설치")
+            print("    brew install python-tk 실행 필요")
+            return False
+    
     if missing_packages:
         print("\n❌ 누락된 패키지를 설치하세요:")
         print(f"   pip install {' '.join(missing_packages)}")
@@ -71,12 +81,13 @@ def build_executable():
     
     # PyInstaller 명령어 구성
     cmd = [
-        "pyinstaller",
+        sys.executable, "-m", "PyInstaller",  # 더 안정적
         "--onefile",
         "--windowed",
         "--noupx",
         "--name", "FileOrganizer",
         "--add-data", f"src{os.pathsep}src",
+        "--clean",  # 클린 빌드
     ]
     
     # 아이콘 파일이 있으면 추가

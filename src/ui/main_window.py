@@ -132,8 +132,8 @@ class MainWindow:
                             foreground='white',
                             borderwidth=0,
                             focuscolor='none',
-                            font=('Segoe UI', 9),
-                            padding=(10, 5))
+                            font=('Segoe UI', 10, 'bold'),
+                            padding=(15, 8))
             
             style.map('TButton',
                         background=[('active', hover_blue), ('pressed', hover_blue)],
@@ -492,7 +492,7 @@ class MainWindow:
         action_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
 
         self.preview_button = ttk.Button(
-            action_frame, text="미리보기", command=self.preview_files
+            action_frame, text="미리보기", command=self.preview_files, style="TButton"
         )
         self.preview_button.pack(side=tk.LEFT, padx=5)
 

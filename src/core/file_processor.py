@@ -105,7 +105,7 @@ class FileProcessor:
                         import subprocess
                         if os.name == "nt":
                             # Windows
-                            subprocess.run(['cmd', '/c', 'del', '/f', '/q', file_path], ...)
+                            subprocess.run(['cmd', '/c', 'del', '/f', '/q', file_path], check=True, capture_output=True)
                         else:
                             # macOS/Linux - 그냥 os.remove 사용
                             os.remove(file_path)

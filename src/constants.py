@@ -8,8 +8,9 @@
 
 # 애플리케이션 정보
 APP_TITLE = "파일 자동 분류 프로그램"
-APP_VERSION = "1.2.1"
-WINDOW_SIZE = "1000x850"
+APP_VERSION = "2.0.0"
+WINDOW_SIZE = "1400x800"
+MAC_SIZE = "1200x700"
 
 # 파일 관련
 CONFIG_FILE = "config/file_organizer_config.json"

@@ -114,33 +114,40 @@ class MainWindow:
         # 일반 라벨 스타일
         style.configure("TLabel", background=panel_bg, foreground=text_primary)
 
-        # 버튼 스타일
-        style.configure(
-            "TButton",
-            background=primary_blue,
-            foreground="white",
-            borderwidth=0,
-            focuscolor="none",
-            font=("Segoe UI", 9),
-            padding=(10, 5),
-        )
-
-        style.map(
-            "TButton",
-            background=[("active", hover_blue), ("pressed", hover_blue)],
-            foreground=[("active", "white")],
-        )
-
-        # 액센트 버튼 (실행 버튼용)
-        style.configure(
-            "Accent.TButton",
-            background="#28A745",  # 녹색
-            foreground="white",
-            font=("Segoe UI", 10, "bold"),
-            padding=(15, 8),
-        )
-
-        style.map("Accent.TButton", background=[("active", "#218838")])
+        # 버튼 스타일 - macOS 특별 처리
+        if self.is_macos:
+            # macOS aqua 테마에서 버튼 글자색만 검은색으로
+            style.configure('TButton',
+                            foreground='black',
+                            font=('Helvetica', 9))
+            
+            # 액센트 버튼도 글자색 설정
+            style.configure('Accent.TButton',
+                            foreground='black',
+                            font=('Helvetica', 10, 'bold'))
+        else:
+            # Windows/Linux
+            style.configure('TButton',
+                            background=primary_blue,
+                            foreground='white',
+                            borderwidth=0,
+                            focuscolor='none',
+                            font=('Segoe UI', 9),
+                            padding=(10, 5))
+            
+            style.map('TButton',
+                        background=[('active', hover_blue), ('pressed', hover_blue)],
+                        foreground=[('active', 'white')])
+            
+            # 액센트 버튼 (실행 버튼용)
+            style.configure('Accent.TButton',
+                            background='#28A745',
+                            foreground='white',
+                            font=('Segoe UI', 10, 'bold'),
+                            padding=(15, 8))
+            
+            style.map('Accent.TButton',
+                    background=[('active', '#218838')])
 
         # LabelFrame 스타일
         style.configure(

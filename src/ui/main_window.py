@@ -604,6 +604,102 @@ class MainWindow:
         self.file_count_label = ttk.Label(header_frame, text="(0개 파일)")
         self.file_count_label.pack(side=tk.LEFT, padx=10)
 
+        # 필터링 프레임 추가
+        filter_frame = ttk.LabelFrame(file_frame, text="필터", padding=5)
+        filter_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # 1. 텍스트 필터
+        text_filter_frame = ttk.Frame(filter_frame)
+        text_filter_frame.pack(fill=tk.X, pady=2)
+
+        ttk.Label(text_filter_frame, text="파일명 검색:").pack(side=tk.LEFT, padx=2)
+
+        self.filter_var = tk.StringVar()
+        self.filter_var.trace("w", lambda *args: self.apply_filters())
+        filter_entry = ttk.Entry(
+            text_filter_frame, textvariable=self.filter_var, width=25
+        )
+        filter_entry.pack(side=tk.LEFT, padx=2)
+
+        # 검색 지우기 버튼
+        ttk.Button(
+            text_filter_frame,
+            text="x",
+            width=3,
+            command=lambda: self.filter_var.set(""),
+        ).pack(side=tk.LEFT)
+
+        # 2. 확장자 필터
+        ext_filter_frame = ttk.Frame(filter_frame)
+        ext_filter_frame.pack(fill=tk.X, pady=2)
+
+        ttk.Label(ext_filter_frame, text="확장자:").pack(side=tk.LEFT, padx=2)
+
+        self.ext_filter_var = tk.StringVar(value="모든 파일")
+        self.ext_filter = ttk.Combobox(
+            ext_filter_frame,
+            textvariable=self.ext_filter_var,
+            values=["모든 파일"],
+            state="readonly",
+            width=15,
+        )
+        self.ext_filter.pack(side=tk.LEFT, padx=2)
+        self.ext_filter.bind("<<ComboboxSelected>>", lambda e: self.apply_filters())
+
+        # 3. 크기 필터
+        ttk.Label(ext_filter_frame, text="크기:").pack(side=tk.LEFT, padx=(10, 2))
+
+        self.size_filter_var = tk.StringVar(value="모든 크기")
+        size_filter = ttk.Combobox(
+            ext_filter_frame,
+            textvariable=self.size_filter_var,
+            values=["모든 크기", "< 1MB", "1-10MB", "10-100MB", "> 100MB"],
+            state="readonly",
+            width=12,
+        )
+        size_filter.pack(side=tk.LEFT, padx=2)
+        size_filter.bind("<<ComboboxSelected>>", lambda e: self.apply_filters())
+
+        # 4. 날짜 필터
+        date_filter_frame = ttk.Frame(filter_frame)
+        date_filter_frame.pack(fill=tk.X, pady=2)
+
+        ttk.Label(date_filter_frame, text="수정일:").pack(side=tk.LEFT, padx=2)
+
+        self.date_filter_var = tk.StringVar(value="모든 날짜")
+        date_filter = ttk.Combobox(
+            date_filter_frame,
+            textvariable=self.date_filter_var,
+            values=["모든 날짜", "오늘", "이번 주", "이번 달", "올해"],
+            state="readonly",
+            width=12,
+        )
+        date_filter.pack(side=tk.LEFT, padx=2)
+        date_filter.bind("<<ComboboxSelected>>", lambda e: self.apply_filters())
+
+        # 5. 규칙 필터
+        ttk.Label(date_filter_frame, text="규칙:").pack(side=tk.LEFT, padx=(10, 2))
+
+        self.rule_filter_var = tk.StringVar(value="모든 규칙")
+        self.rule_filter = ttk.Combobox(
+            date_filter_frame,
+            textvariable=self.rule_filter_var,
+            values=["모든 규칙"],
+            state="readonly",
+            width=15,
+        )
+        self.rule_filter.pack(side=tk.LEFT, padx=2)
+        self.rule_filter.bind("<<ComboboxSelected>>", lambda e: self.apply_filters())
+
+        # 필터 상태 표시
+        self.filter_status_label = ttk.Label(filter_frame, text="", foreground="blue")
+        self.filter_status_label.pack(fill=tk.X, pady=2)
+
+        # 필터 초기화 버튼
+        ttk.Button(filter_frame, text="필터 초기화", command=self.reset_filters).pack(
+            pady=2
+        )
+
         # 도구 모음
         toolbar_frame = ttk.Frame(file_frame)
         toolbar_frame.pack(fill=tk.X, padx=5, pady=2)
@@ -1159,6 +1255,67 @@ class MainWindow:
                 f"파일 정리가 완료되었습니다.\n\n성공: {success_count}개\n실패: {error_count}개",
             ),
         )
+
+    def apply_filters(self):
+        """모든 필터 적용"""
+        # 필터 값 가져오기
+        text_filter = self.filter_var.get().lower()
+        ext_filter = self.ext_filter_var.get()
+        size_filter = self.size_filter_var.get()
+        date_filter = self.date_filter_var.get()
+        rule_filter = self.rule_filter_var.get()
+
+        visible_count = 0
+        total_count = 0
+
+        # 모든 파일(아이템)에 대해 필터 적용
+        for i, item in enumerate(self.file_tree.get_children()):
+            total_count += 1
+            values = self.file_tree.item(item)["values"]
+            file_info = self.file_list_data[i]
+
+            # 각 필터 조건 확인
+            show = True
+
+            # 1. 텍스트 필터
+            if text_filter and text_filter not in file_info["filename"].lower():
+                show = False
+
+            # 2. 확장자 필터
+            if show and ext_filter != "모든 파일":
+                _, ext = os.path.splitext(file_info["filename"])
+                if ext.lower() != ext_filter.lower():
+                    show = False
+
+            # 3. 크기 필터
+            if show and size_filter != "모든 크기":
+                size = self.get_file_size_in_bytes(file_info["path"])
+                if not self.check_size_filter(size, size_filter):
+                    show = False
+
+            # 4. 날짜 필터
+            if show and date_filter != "모든 날짜":
+                if not self.check_date_filter(file_info["path"], date_filter):
+                    show = False
+
+            # 5. 규칙 필터
+            if show and rule_filter != "모든 규칙":
+                if file_info["keyword"] != rule_filter:
+                    show = False
+
+            # 표시/숨김 처리
+            if show:
+                self.file_tree.item(item, tags=())
+                visible_count += 1
+
+        # 숨김 태그 스타일 설정
+        self.file_tree.tag_configure("hidden", foreground="#CCCCCC")
+
+        # 필터 상태 업데이트
+        self.update_filter_status(visible_count, total_count)
+
+    def get_file_size_in_bytes(self, file_path):
+        """파일 크기를 바이트로 반환"""
 
     def disable_ui(self):
         """UI 비활성화"""

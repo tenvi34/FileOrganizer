@@ -27,9 +27,9 @@ class MainWindow:
         """초기화"""
         self.root = root
         # 플랫폼 감지
-        self.is_macos = sys.platform == 'darwin'
-        self.is_windows = sys.platform == 'win32'
-        
+        self.is_macos = sys.platform == "darwin"
+        self.is_windows = sys.platform == "win32"
+
         # 플랫폼별 설정
         if self.is_macos:
             self.root.title(f"{APP_TITLE} v{APP_VERSION}")
@@ -72,16 +72,19 @@ class MainWindow:
         # 규칙 목록 업데이트
         self.update_rule_list()
 
+        # 키보드 단축키 바인딩 추가
+        self.setup_keyboard_shortcuts()
+
     def setup_styles(self):
         """스타일 설정 - 흰색/파랑 테마"""
         style = ttk.Style()
 
         # 테마 설정
         # macOS 호환 수정
-        if sys.platform == 'darwin':
-            style.theme_use('aqua')  # macOS 네이티브 테마
+        if sys.platform == "darwin":
+            style.theme_use("aqua")  # macOS 네이티브 테마
         else:
-            style.theme_use('clam')
+            style.theme_use("clam")
 
         # 색상 팔레트 정의 (흰색-파랑 조합)
         main_bg = "#FAFBFC"  # 매우 밝은 회색 (거의 흰색)
@@ -106,7 +109,7 @@ class MainWindow:
         # 헤더 라벨 스타일
         style.configure(
             "Header.TLabel",
-            font=('Helvetica' if sys.platform == 'darwin' else 'Segoe UI', 12, 'bold'),
+            font=("Helvetica" if sys.platform == "darwin" else "Segoe UI", 12, "bold"),
             background=panel_bg,
             foreground=primary_blue,
         )
@@ -117,37 +120,40 @@ class MainWindow:
         # 버튼 스타일 - macOS 특별 처리
         if self.is_macos:
             # macOS aqua 테마에서 버튼 글자색만 검은색으로
-            style.configure('TButton',
-                            foreground='black',
-                            font=('Helvetica', 9))
-            
+            style.configure("TButton", foreground="black", font=("Helvetica", 9))
+
             # 액센트 버튼도 글자색 설정
-            style.configure('Accent.TButton',
-                            foreground='black',
-                            font=('Helvetica', 10, 'bold'))
+            style.configure(
+                "Accent.TButton", foreground="black", font=("Helvetica", 10, "bold")
+            )
         else:
             # Windows/Linux
-            style.configure('TButton',
-                            background=primary_blue,
-                            foreground='white',
-                            borderwidth=0,
-                            focuscolor='none',
-                            font=('Segoe UI', 10, 'bold'),
-                            padding=(15, 8))
-            
-            style.map('TButton',
-                        background=[('active', hover_blue), ('pressed', hover_blue)],
-                        foreground=[('active', 'white')])
-            
+            style.configure(
+                "TButton",
+                background=primary_blue,
+                foreground="white",
+                borderwidth=0,
+                focuscolor="none",
+                font=("Segoe UI", 10, "bold"),
+                padding=(15, 8),
+            )
+
+            style.map(
+                "TButton",
+                background=[("active", hover_blue), ("pressed", hover_blue)],
+                foreground=[("active", "white")],
+            )
+
             # 액센트 버튼 (실행 버튼용)
-            style.configure('Accent.TButton',
-                            background='#28A745',
-                            foreground='white',
-                            font=('Segoe UI', 10, 'bold'),
-                            padding=(15, 8))
-            
-            style.map('Accent.TButton',
-                    background=[('active', '#218838')])
+            style.configure(
+                "Accent.TButton",
+                background="#28A745",
+                foreground="white",
+                font=("Segoe UI", 10, "bold"),
+                padding=(15, 8),
+            )
+
+            style.map("Accent.TButton", background=[("active", "#218838")])
 
         # LabelFrame 스타일
         style.configure(
@@ -273,6 +279,80 @@ class MainWindow:
 
         style.map("TScrollbar", background=[("active", "#D0D0D0")])
 
+    def setup_keyboard_shortcuts(self):
+        """키보드 단축키 설정"""
+        # 플랫폼별 modifier 키 설정
+        if sys.platform == "darwin":
+            modifier = "Command"
+            mod_key = "Cmd"  # 표시용
+        else:
+            modifier = "Control"
+            mod_key = "Ctrl"  # 표시용
+
+        # 파일 작업 단축키
+        self.root.bind(
+            f"<{modifier}-r>", lambda e: self.refresh_file_list()
+        )  # 새로고침
+        self.root.bind(
+            f"<{modifier}-a>", lambda e: self.select_all_files()
+        )  # 전체 선택
+        self.root.bind(
+            f"<{modifier}-d>", lambda e: self.deselect_all_files()
+        )  # 전체 해제
+
+        # 실행 단축키 - Return 키 바인딩 수정
+        self.root.bind(f"<{modifier}-Return>", lambda e: self.organize_files())  # 실행
+        self.root.bind(f"<{modifier}-p>", lambda e: self.preview_files())  # 미리보기
+
+        # 로그 관련
+        self.root.bind(f"<{modifier}-l>", lambda e: self.clear_log())  # 로그 지우기
+        self.root.bind(f"<{modifier}-s>", lambda e: self.save_log())  # 로그 저장
+
+        # F5로 새로고침
+        self.root.bind("<F5>", lambda e: self.refresh_file_list())
+
+        # Delete 키로 선택 규칙 삭제
+        self.rule_tree.bind("<Delete>", lambda e: self.delete_rule())
+
+    def setup_menubar(self):
+        """메뉴바 설정"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        # 파일 메뉴
+        file_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="파일", menu=file_menu)
+
+        modifier = "⌘" if sys.platform == "darwin" else "Ctrl+"
+
+        file_menu.add_command(
+            label=f"새로고침 ({modifier}R)", command=self.refresh_file_list
+        )
+        file_menu.add_separator()
+        file_menu.add_command(label="종료", command=self.root.quit)
+
+        # 편집 메뉴
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="편집", menu=edit_menu)
+
+        edit_menu.add_command(
+            label=f"전체 선택 ({modifier}A)", command=self.select_all_files
+        )
+        edit_menu.add_command(
+            label=f"전체 해제 ({modifier}D)", command=self.deselect_all_files
+        )
+
+        # 도구 메뉴
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="도구", menu=tools_menu)
+
+        tools_menu.add_command(
+            label=f"미리보기 ({modifier}P)", command=self.preview_files
+        )
+        tools_menu.add_command(
+            label=f"실행 ({modifier}Enter)", command=self.organize_files
+        )
+
     def setup_ui(self):
         """UI 구성 - 3단 레이아웃"""
         # 메인 컨테이너
@@ -291,6 +371,8 @@ class MainWindow:
 
         # 3. 상태 패널 (오른쪽)
         self.setup_status_panel()
+
+        self.setup_menubar()
 
     def setup_settings_panel(self):
         """설정 패널 구성"""

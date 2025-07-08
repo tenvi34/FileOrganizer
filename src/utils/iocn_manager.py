@@ -13,7 +13,27 @@ class IconManager:
         self.size = size
         self.icons = {}
         self.default_icon = None
-        self._load_icons()
+        self.text_icons = {  # 텍스트 기반 대체 아이콘
+            "folder": "📁",
+            "image": "🖼️",
+            "document": "📄",
+            "spreadsheet": "📊",
+            "presentation": "📽️",
+            "pdf": "📕",
+            "text": "📝",
+            "code": "💻",
+            "archive": "🗜️",
+            "audio": "🎵",
+            "video": "🎬",
+            "executable": "⚙️",
+            "default": "📎",
+        }
+
+        # 아이콘 디렉토리가 없으면 텍스트 아이콘 사용
+        if os.path.exists(self.icon_dir):
+            self._load_icons()
+        else:
+            print(f"아이콘 디렉토리 '{self.icon_dir}'가 없습니다. 텍스트 아이콘을 사용합니다.")
 
     def _load_icons(self):
         """아이콘 로드"""

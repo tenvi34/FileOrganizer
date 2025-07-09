@@ -11,7 +11,7 @@ from tkinter import filedialog, messagebox, ttk
 import threading
 import time
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from src.constants import *
 from src.core import FileMatcher, FileProcessor, RuleManager
@@ -1023,8 +1023,12 @@ class MainWindow:
             self.file_vars[item_id] = tk.BooleanVar(value=True)
             count += 1
 
+        # 파일 목록을 모두 로드한 후
         self.file_count_label.config(text=f"({count}개 파일)")
         self.update_stats()
+
+        # 확장자와 규칙 필터 옵션 업데이트
+        self.update_extension_filter_options()
 
     def get_file_info(self, file_path, dest_folder, keyword, match_mode):
         """파일 정보 가져오기"""
@@ -1133,14 +1137,28 @@ class MainWindow:
 
         self.log("=== 미리보기 종료 ===")
 
+    def get_filtered_files(self):
+        """필터링된 파일만 반환"""
+        filtered_files = []
+
+        for i, item in enumerate(self.file_tree.get_children()):
+            # hidden 태그가 없는 파일들만
+            if "hidden" not in self.file_tree.item(item)["tags"]:
+                if self.file_vars[item].get():  # 체크된 항목만
+                    filtered_files.append(self.file_list_data[i])
+
+        return filtered_files
+
     def organize_files(self):
         """파일 정리 시작"""
         # 선택된 파일 확인
-        selected_files = []
-        for i, (item_id, var) in enumerate(self.file_vars.items()):
-            if var.get():
-                file_info = self.file_list_data[i]
-                selected_files.append(file_info)
+        # selected_files = []
+        # for i, (item_id, var) in enumerate(self.file_vars.items()):
+        #     if var.get():
+        #         file_info = self.file_list_data[i]
+        #         selected_files.append(file_info)
+
+        selected_files = self.get_filtered_files()
 
         if not selected_files:
             messagebox.showinfo("정보", "선택된 파일이 없습니다.")
@@ -1257,7 +1275,7 @@ class MainWindow:
         )
 
     def apply_filters(self):
-        """모든 필터 적용"""
+        """모든 필터 적용 - 개선된 버전"""
         # 필터 값 가져오기
         text_filter = self.filter_var.get().lower()
         ext_filter = self.ext_filter_var.get()
@@ -1265,15 +1283,15 @@ class MainWindow:
         date_filter = self.date_filter_var.get()
         rule_filter = self.rule_filter_var.get()
 
+        # 먼저 모든 아이템을 삭제
+        for item in self.file_tree.get_children():
+            self.file_tree.delete(item)
+
+        # 필터링된 아이템만 다시 추가
         visible_count = 0
-        total_count = 0
+        self.file_vars.clear()
 
-        # 모든 파일(아이템)에 대해 필터 적용
-        for i, item in enumerate(self.file_tree.get_children()):
-            total_count += 1
-            values = self.file_tree.item(item)["values"]
-            file_info = self.file_list_data[i]
-
+        for i, file_info in enumerate(self.file_list_data):
             # 각 필터 조건 확인
             show = True
 
@@ -1303,19 +1321,119 @@ class MainWindow:
                 if file_info["keyword"] != rule_filter:
                     show = False
 
-            # 표시/숨김 처리
+            # 필터 조건에 맞는 아이템만 트리에 추가
             if show:
-                self.file_tree.item(item, tags=())
+                item_id = self.file_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        "✓",  # 기본적으로 체크
+                        file_info["filename"],
+                        file_info["size"],
+                        file_info["modified"],
+                        file_info["rule"],
+                        file_info["destination"],
+                    ),
+                )
+                # 체크박스 상태 저장
+                self.file_vars[item_id] = tk.BooleanVar(value=True)
                 visible_count += 1
 
-        # 숨김 태그 스타일 설정
-        self.file_tree.tag_configure("hidden", foreground="#CCCCCC")
-
         # 필터 상태 업데이트
+        total_count = len(self.file_list_data)
         self.update_filter_status(visible_count, total_count)
+
+        # 확장자 필터 옵션 업데이트
+        self.update_extension_filter_options()
+
+    def update_extension_filter_options(self):
+        """확장자 필터 옵션 업데이트"""
+        # 현재 파일들의 확장자 수집
+        extensions = set()
+        for file_info in self.file_list_data:
+            _, ext = os.path.splitext(file_info["filename"])
+            if ext:
+                extensions.add(ext.lower())
+
+        # 확장자 필터 콤보박스 업데이트
+        ext_list = ["모든 파일"] + sorted(list(extensions))
+        self.ext_filter["values"] = ext_list
+
+        # 규칙 필터 옵션도 업데이트
+        rules = set()
+        for file_info in self.file_list_data:
+            rules.add(file_info["keyword"])
+
+        rule_list = ["모든 규칙"] + sorted(list(rules))
+        self.rule_filter["values"] = rule_list
 
     def get_file_size_in_bytes(self, file_path):
         """파일 크기를 바이트로 반환"""
+        try:
+            return os.path.getsize(file_path)
+        except:
+            return 0
+
+    def check_size_filter(self, size_bytes, filter_value):
+        """크기 필터 조건 확인"""
+        mb = size_bytes / (1024 * 1024)
+
+        if filter_value == "< 1MB":
+            return mb < 1
+        elif filter_value == "1-10MB":
+            return 1 <= mb <= 10
+        elif filter_value == "10-100MB":
+            return 10 <= mb <= 100
+        elif filter_value == "> 100MB":
+            return mb > 100
+        return True
+
+    def check_date_filter(self, file_path, filter_value):
+        """날짜 필터 조건 확인"""
+        try:
+            file_time = os.path.getmtime(file_path)
+            file_date = datetime.fromtimestamp(file_time)
+            now = datetime.now()
+
+            if filter_value == "오늘":
+                return file_date.date() == now.date()
+            elif filter_value == "이번 주":
+                week_start = now - timedelta(days=now.weekday())
+                return file_date >= week_start
+            elif filter_value == "이번 달":
+                return file_date.year == now.year and file_date.month == now.month
+            elif filter_value == "올해":
+                return file_date.year == now.year
+        except:
+            pass
+        return True
+
+    def update_filter_status(self, visible_count, total_count):
+        """필터 상태 표시 업데이트"""
+        if visible_count < total_count:
+            status = f"필터링됨: {visible_count}/{total_count}개 표시"
+            self.filter_status_label.config(text=status, foreground="blue")
+        else:
+            self.filter_status_label.config(text="", foreground="black")
+
+        # 파일 개수 라벨도 업데이트
+        self.file_count_label.config(text=f"({visible_count}개 파일)")
+
+    def reset_filters(self):
+        """모든 필터 초기화"""
+        self.filter_var.set("")
+        self.ext_filter_var.set("모든 파일")
+        self.size_filter_var.set("모든 크기")
+        self.date_filter_var.set("모든 날짜")
+        self.rule_filter_var.set("모든 규칙")
+
+        # 모든 아이템 표시
+        for item in self.file_tree.get_children():
+            self.file_tree.item(item, tags=())
+
+        # 상태 업데이트
+        total = len(self.file_list_data)
+        self.update_filter_status(total, total)
 
     def disable_ui(self):
         """UI 비활성화"""

@@ -12,6 +12,11 @@ file_organizer/
 │   ├── ui/                    # UI 관련
 │   │   ├── __init__.py
 │   │   ├── main_window.py     # 메인 윈도우
+│   │   ├── settings_panel.py  # 설정 패널
+│   │   ├── file_list_panel.py # 파일 목록 패널
+│   │   ├── status_panel.py    # 상태 패널
+│   │   ├── menubar.py         # 메뉴바
+│   │   ├── shortcuts.py       # 단축키 관리
 │   │   └── dialogs.py         # 대화상자
 │   └── utils/                 # 유틸리티
 │       ├── __init__.py

@@ -9,7 +9,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime, timedelta
-from src.utils.icon_manager import IconManager
+# from src.utils.icon_manager import IconManager
 
 
 class FileListPanel:
@@ -32,7 +32,7 @@ class FileListPanel:
         self.file_vars = {}         # 체크박스 변수들
 
         # 아이콘 매니저 초기화
-        self.icon_manager = IconManager()
+        # self.icon_manager = IconManager()
 
         # 필터 변수
         self.filter_var = tk.StringVar()
@@ -264,7 +264,7 @@ class FileListPanel:
             item_id = self.file_tree.insert(
                 "",
                 "end",
-                image=self.icon_manager.get_icon(file_info["filename"]),  # 아이콘 추가
+                # image=self.icon_manager.get_icon(file_info["filename"]),  # 아이콘 추가
                 values=(
                     "✓",  # 기본적으로 체크
                     file_info["filename"],
@@ -407,7 +407,7 @@ class FileListPanel:
                 item_id = self.file_tree.insert(
                     "",
                     "end",
-                    image=self.icon_manager.get_icon(file_info["filename"]),  # 아이콘 추가
+                    # image=self.icon_manager.get_icon(file_info["filename"]),  # 아이콘 추가
                     values=(
                         "✓",  # 기본적으로 체크
                         file_info["filename"],

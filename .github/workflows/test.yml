@@ -17,7 +17,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install send2trash
-        pup install Pillow
+        pip install Pillow
     
     - name: Run tests
       run: |

@@ -56,9 +56,9 @@ class SettingsPanel:
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
         # 탭 생성
-        self.create_basic_settings_tab()    # 기본 설정 탭
-        self.create_rules_tab()             # 규칙 관리 탭
-        self.create_options_tab()           # 작업 옵션 탭
+        self.create_basic_settings_tab()  # 기본 설정 탭
+        self.create_rules_tab()  # 규칙 관리 탭
+        self.create_options_tab()  # 작업 옵션 탭
 
     def create_basic_settings_tab(self):
         """기본 설정 탭"""
@@ -231,6 +231,25 @@ class SettingsPanel:
         # 초기 상태 설정
         self.delete_options_frame.pack_forget()
 
+        # 설정 관리 프레임 추가
+        config_frame = ttk.LabelFrame(options_frame, text="설정 관리", padding=10)
+        config_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        config_button_frame = ttk.Frame(config_frame)
+        config_button_frame.pack(fill=tk.X)
+
+        ttk.Button(
+            config_button_frame, text="설정 내보내기", command=self.export_config
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            config_button_frame, text="설정 불러오기", command=self.import_config
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            config_button_frame, text="설정 초기화", command=self.reset_config
+        ).pack(side=tk.LEFT, padx=5)
+
         # 작업 버튼
         action_frame = ttk.Frame(options_frame)
         action_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=10)
@@ -399,6 +418,154 @@ class SettingsPanel:
             self.rule_tree.insert(
                 "", "end", values=(check_mark, keyword, match_mode, dest_display)
             )
+
+    def export_config(self):
+        """설정 내보내기"""
+        from tkinter import filedialog
+        import json
+        from datetime import datetime
+
+        # 기본 파일명 생성
+        default_filename = (
+            f"file_organizer_config_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        )
+
+        filename = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON 파일", "*.json"), ("모든 파일", "*.*")],
+            initialfile=default_filename,
+            title="설정 내보내기",
+        )
+
+        if filename:
+            try:
+                # 현재 설정을 저장
+                export_data = {
+                    "version": "2.0",
+                    "export_date": datetime.now().isoformat(),
+                    "rules": self.rule_manager.rules,
+                    "settings": {
+                        "include_subfolders": self.subfolder_var.get(),
+                        "default_operation": self.operation_var.get(),
+                        "recent_folders": list(self.recent_listbox.get(0, tk.END)),
+                    },
+                }
+
+                with open(filename, "w", encoding="utf-8") as f:
+                    json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+                messagebox.showinfo("성공", f"설정을 내보냈습니다:\n{filename}")
+                if self.callbacks.get("log"):
+                    self.callbacks["log"](f"설정 내보내기 완료: {filename}")
+
+            except Exception as e:
+                messagebox.showerror("오류", f"설정 내보내기 실패:\n{str(e)}")
+
+    def import_config(self):
+        """설정 불러오기"""
+        from tkinter import filedialog
+        import json
+
+        filename = filedialog.askopenfilename(
+            filetypes=[("JSON 파일", "*.json"), ("모든 파일", "*.*")],
+            title="설정 불러오기",
+        )
+
+        if filename:
+            try:
+                with open(filename, "r", encoding="utf-8") as f:
+                    import_data = json.load(f)
+
+                # 버전 확인
+                version = import_data.get("version", "1.0")
+                if version not in ["1.0", "2.0"]:
+                    messagebox.showwarning(
+                        "경고", f"지원하지 않는 설정 파일 버전입니다: {version}"
+                    )
+                    return
+
+                # 확인 대화상자
+                rule_count = len(import_data.get("rules", {}))
+                if not messagebox.askyesno(
+                    "확인",
+                    f"설정을 불러오시겠습니까?\n\n"
+                    f"규칙 수: {rule_count}개\n"
+                    f"내보낸 날짜: {import_data.get('export_date', '알 수 없음')}\n\n"
+                    f"기존 설정은 모두 대체됩니다.",
+                ):
+                    return
+
+                # 규칙 불러오기
+                if "rules" in import_data:
+                    self.rule_manager.rules = import_data["rules"]
+                    self.rule_manager.save_rules()
+                    self.update_rule_list()
+
+                # 설정 불러오기
+                if "settings" in import_data:
+                    settings = import_data["settings"]
+
+                    # 하위 폴더 포함 옵션
+                    if "include_subfolders" in settings:
+                        self.subfolder_var.set(settings["include_subfolders"])
+
+                    # 기본 작업 모드
+                    if "default_operation" in settings:
+                        self.operation_var.set(settings["default_operation"])
+                        self.on_operation_change()
+
+                    # 최근 폴더 목록
+                    if "recent_folders" in settings:
+                        self.recent_listbox.delete(0, tk.END)
+                        for folder in settings["recent_folders"]:
+                            if os.path.exists(folder):  # 존재하는 폴더만 추가
+                                self.recent_listbox.insert(tk.END, folder)
+
+                messagebox.showinfo("성공", "설정을 불러왔습니다.")
+                if self.callbacks.get("log"):
+                    self.callbacks["log"](f"설정 불러오기 완료: {filename}")
+
+                # 파일 목록 새로고침
+                if self.callbacks.get("refresh_files"):
+                    self.callbacks["refresh_files"]()
+
+            except json.JSONDecodeError:
+                messagebox.showerror("오류", "올바른 JSON 파일이 아닙니다.")
+            except Exception as e:
+                messagebox.showerror("오류", f"설정 불러오기 실패:\n{str(e)}")
+
+    def reset_config(self):
+        """설정 초기화"""
+        if messagebox.askyesno(
+            "확인",
+            "모든 규칙과 설정을 초기화하시겠습니까?\n\n이 작업은 되돌릴 수 없습니다.",
+        ):
+            # 규칙 초기화
+            self.rule_manager.rules.clear()
+            self.rule_manager.save_rules()
+            self.update_rule_list()
+
+            # 설정 초기화
+            self.subfolder_var.set(True)
+            self.operation_var.set("move")
+            self.on_operation_change()
+
+            # 최근 폴더 목록 초기화
+            self.recent_listbox.delete(0, tk.END)
+
+            # 입력 필드 초기화
+            self.source_var.set("")
+            self.keyword_var.set("")
+            self.dest_var.set("")
+            self.match_mode_var.set(DEFAULT_MATCH_MODE)
+
+            messagebox.showinfo("완료", "설정이 초기화되었습니다.")
+            if self.callbacks.get("log"):
+                self.callbacks["log"]("설정 초기화 완료")
+
+            # 파일 목록 새로고침
+            if self.callbacks.get("refresh_files"):
+                self.callbacks["refresh_files"]()
 
     def get_widget(self):
         """위젯 반환"""

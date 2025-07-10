@@ -297,6 +297,9 @@ class MainWindow:
             "clear_log": lambda: self.status_panel.clear_log(),
             "save_log": lambda: self.status_panel.save_log(),
             "show_about": self.show_about,
+            # 설정 관리 콜백
+            "export_config": lambda: self.settings_panel.export_config(),
+            "import_config": lambda: self.settings_panel.import_config(),
         }
 
         # 1. 설정 패널 (왼쪽)

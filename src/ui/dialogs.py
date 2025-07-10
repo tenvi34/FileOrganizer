@@ -101,5 +101,5 @@ class LogWindow:
         self.window.destroy()
 
     def is_alive(self) -> bool:
-        """창이 남아있는지 화인"""
+        """창이 남아있는지 확인"""
         return self._alive and self.window.winfo_exists()

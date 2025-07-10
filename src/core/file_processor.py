@@ -7,7 +7,10 @@
 
 import os
 import shutil
-import send2trash
+try:
+    import send2trash
+except ImportError:  # pragma: no cover - fallback for environments without send2trash
+    send2trash = None
 from typing import List, Tuple, Callable, Optional
 
 
@@ -116,14 +119,18 @@ class FileProcessor:
                 return False
 
         else:
-            # 휴지통으로 이동
+            # 휴지통으로 이동. send2trash 모듈이 없으면 일반 삭제 수행
             try:
-                # send2trash는 정규화된 경로 필요
                 normalized_path = os.path.normpath(file_path)
-                send2trash.send2trash(normalized_path)
+                if send2trash is not None:
+                    send2trash.send2trash(normalized_path)
+                else:
+                    os.remove(normalized_path)
                 return True
             except Exception as e:
-                self.log(f"❌ 삭제 실패: {file_name} - {type(e).__name__}: {str(e)}")
+                self.log(
+                    f"❌ 삭제 실패: {file_name} - {type(e).__name__}: {str(e)}"
+                )
                 self.log(f"   경로: {file_path}")
                 return False
             

@@ -93,6 +93,22 @@ class TestFileMatcher(unittest.TestCase):
         self.assertIn("doc1.txt", matched_names)
         self.assertIn("doc2.pdf", matched_names)
 
+    def test_is_system_file_hidden_and_normal(self):
+        """숨김 파일과 일반 파일 판별 테스트"""
+        # 숨김 파일 생성
+        hidden_path = os.path.join(self.temp_dir, ".hidden.txt")
+        with open(hidden_path, "w") as f:
+            f.write("hidden")
+
+        # 일반 파일 생성
+        normal_path = os.path.join(self.temp_dir, "visible.txt")
+        with open(normal_path, "w") as f:
+            f.write("visible")
+
+        # 검증
+        self.assertTrue(self.matcher.is_system_file(hidden_path))
+        self.assertFalse(self.matcher.is_system_file(normal_path))
+
 
 class TestFileProcessor(unittest.TestCase):
     """FileProcessor 클래스 테스트"""

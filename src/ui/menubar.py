@@ -75,13 +75,6 @@ class MenuBar:
         )
         file_menu.add_separator()
 
-        file_menu.add_command(
-            label=f"로그 저장 ({modifier}S)",
-            command=self.callbacks.get("save_log"),
-            accelerator=f"{modifier}S",
-        )
-        file_menu.add_separator()
-
         file_menu.add_command(label="종료", command=self.root.quit)
 
     def create_edit_menu(self):

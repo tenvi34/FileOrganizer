@@ -67,7 +67,7 @@ git clone https://github.com/tenvi34/FileOrganizer.git
 cd FileOrganizer
 
 # Python 3.7 이상 필요
-python3 file_organizer.py
+python3 main.py
 ```
 
 ## 📖 사용 방법
@@ -167,19 +167,19 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 개발 모드 실행
-python file_organizer.py
+python main.py
 ```
 
 ### 빌드 방법
 
 #### Windows 실행 파일 생성
 ```bash
-pyinstaller --onefile --windowed --noupx --name "FileOrganizer" file_organizer.py
+pyinstaller --onefile --windowed --noupx --name "FileOrganizer" main.py
 ```
 
 #### macOS 앱 번들 생성
 ```bash
-pyinstaller --onefile --windowed --noupx --name "FileOrganizer" --osx-bundle-identifier "com.yourname.fileorganizer" file_organizer.py
+pyinstaller --onefile --windowed --noupx --name "FileOrganizer" --osx-bundle-identifier "com.yourname.fileorganizer" main.py
 ```
 
 ### GitHub Actions 자동 빌드

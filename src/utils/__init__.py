@@ -2,6 +2,9 @@
 from .config import ConfigManager
 from .logger import Logger
 from .validators import Validator
-from .icon_manager import IconManager
+try:
+    from .icon_manager import IconManager
+except Exception:  # pragma: no cover - optional dependency (Pillow)
+    IconManager = None
 
 __all__ = ["ConfigManager", "Logger", "Validator", "IconManager"]

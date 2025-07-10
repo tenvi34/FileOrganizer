@@ -1,8 +1,13 @@
 # src/utils/icon_manager.py (새 파일)
 import os
 import tkinter as tk
-from PIL import Image, ImageTk
 import mimetypes
+
+try:
+    from PIL import Image, ImageTk
+except Exception:  # pragma: no cover - Pillow is optional
+    Image = None
+    ImageTk = None
 
 
 class IconManager:
@@ -29,11 +34,14 @@ class IconManager:
             "default": "📎",
         }
 
-        # 아이콘 디렉토리가 없으면 텍스트 아이콘 사용
-        if os.path.exists(self.icon_dir):
-            self._load_icons()
+        # Pillow가 없거나 아이콘 폴더가 없으면 텍스트 아이콘만 사용
+        if Image is None or ImageTk is None or not os.path.exists(self.icon_dir):
+            if not os.path.exists(self.icon_dir):
+                print(
+                    f"아이콘 디렉토리 '{self.icon_dir}'가 없습니다. 텍스트 아이콘을 사용합니다."
+                )
         else:
-            print(f"아이콘 디렉토리 '{self.icon_dir}'가 없습니다. 텍스트 아이콘을 사용합니다.")
+            self._load_icons()
 
     def _load_icons(self):
         """아이콘 로드"""
@@ -72,6 +80,8 @@ class IconManager:
 
     def _load_and_resize(self, path):
         """이미지 로드 및 리사이즈"""
+        if Image is None or ImageTk is None:
+            return None
         try:
             image = Image.open(path)
             image = image.resize(self.size, Image.Resampling.LANCZOS)

@@ -7,9 +7,13 @@
 
 import os
 import tkinter as tk
+import threading
 from tkinter import ttk
 from datetime import datetime, timedelta
+
 # from src.utils.icon_manager import IconManager
+from src.utils.performance import FileInfoCache, ProgressTracker
+from src.ui.progress_dialog import ProgressDialog
 
 
 class FileListPanel:
@@ -28,11 +32,16 @@ class FileListPanel:
         self.callbacks = callbacks
 
         # 파일 목록 관련 변수
-        self.file_list_data = []    # 매칭된 파일 정보
-        self.file_vars = {}         # 체크박스 변수들
+        self.file_list_data = []  # 매칭된 파일 정보
+        self.file_vars = {}  # 체크박스 변수들
 
         # 아이콘 매니저 초기화
         # self.icon_manager = IconManager()
+
+        # 성능 개선
+        self.file_cache = FileInfoCache
+        self.scan_thread = None
+        self.is_scanning = False
 
         # 필터 변수
         self.filter_var = tk.StringVar()
@@ -188,7 +197,7 @@ class FileListPanel:
             show="tree headings",
         )
 
-        self.file_tree.heading("#0", text="") # 아이콘 열 추가
+        self.file_tree.heading("#0", text="")  # 아이콘 열 추가
         self.file_tree.heading("check", text="✓")
         self.file_tree.heading("filename", text="파일명")
         self.file_tree.heading("size", text="크기")
@@ -196,7 +205,7 @@ class FileListPanel:
         self.file_tree.heading("rule", text="매칭 규칙")
         self.file_tree.heading("destination", text="대상")
 
-        self.file_tree.column("#0", width=0, stretch=False) # 아이콘용
+        self.file_tree.column("#0", width=0, stretch=False)  # 아이콘용
         self.file_tree.column("check", width=30, anchor="center")
         self.file_tree.column("filename", width=200)
         self.file_tree.column("size", width=80)
@@ -223,16 +232,84 @@ class FileListPanel:
 
         self.file_tree.bind("<Button-1>", self.on_file_click)
 
+    # def refresh_file_list(self):
+    #     """파일 목록 새로고침"""
+    #     # 기존 목록 초기화
+    #     for item in self.file_tree.get_children():
+    #         self.file_tree.delete(item)
+
+    #     self.file_list_data.clear()
+    #     self.file_vars.clear()
+
+    #     # 콜백을 통해 설정 가져오기
+    #     source = self.callbacks.get("get_source", lambda: None)()
+    #     if not source or not os.path.exists(source):
+    #         self.file_count_label.config(text="(0개 파일)")
+    #         self.callbacks.get("update_stats", lambda: None)()
+    #         return
+
+    #     active_rules = self.callbacks.get("get_active_rules", lambda: {})()
+    #     if not active_rules:
+    #         self.file_count_label.config(text="(0개 파일)")
+    #         self.callbacks.get("update_stats", lambda: None)()
+    #         return
+
+    #     include_subfolders = self.callbacks.get("get_subfolder_option", lambda: True)()
+
+    #     # 매칭되는 파일 찾기
+    #     count = 0
+    #     for (
+    #         file_path,
+    #         dest_folder,
+    #         keyword,
+    #         match_mode,
+    #     ) in self.file_matcher.find_matching_files_generator(
+    #         source, active_rules, include_subfolders
+    #     ):
+    #         file_info = self.get_file_info(file_path, dest_folder, keyword, match_mode)
+    #         self.file_list_data.append(file_info)
+
+    #         # 트리에 추가
+    #         item_id = self.file_tree.insert(
+    #             "",
+    #             "end",
+    #             # image=self.icon_manager.get_icon(file_info["filename"]),  # 아이콘 추가
+    #             values=(
+    #                 "✓",  # 기본적으로 체크
+    #                 file_info["filename"],
+    #                 file_info["size"],
+    #                 file_info["modified"],
+    #                 file_info["rule"],
+    #                 file_info["destination"],
+    #             ),
+    #         )
+
+    #         # 체크박스 상태 저장
+    #         self.file_vars[item_id] = tk.BooleanVar(value=True)
+    #         count += 1
+
+    #     # 파일 목록을 모두 로드한 후
+    #     self.file_count_label.config(text=f"({count}개 파일)")
+    #     self.callbacks.get("update_stats", lambda: None)()
+
+    #     # 확장자와 규칙 필터 옵션 업데이트
+    #     self.update_extension_filter_options()
+
     def refresh_file_list(self):
-        """파일 목록 새로고침"""
+        """파일 목록 새로고침 - 성능 개선 버전"""
+        # 이미 스캔 중이면 중지
+        if self.is_scanning and self.scan_thread and self.scan_thread.is_alive():
+            return
+
         # 기존 목록 초기화
         for item in self.file_tree.get_children():
             self.file_tree.delete(item)
 
         self.file_list_data.clear()
         self.file_vars.clear()
+        self.file_cache.clear()
 
-        # 콜백을 통해 설정 가져오기
+        # 설정 가져오기
         source = self.callbacks.get("get_source", lambda: None)()
         if not source or not os.path.exists(source):
             self.file_count_label.config(text="(0개 파일)")
@@ -245,46 +322,90 @@ class FileListPanel:
             self.callbacks.get("update_stats", lambda: None)()
             return
 
-        include_subfolders = self.callbacks.get("get_subfolder_option", lambda: True)()
+        # 진행률 다이얼로그 표시
+        self.progress_dialog = ProgressDialog(
+            self.frame.winfo_toplevel(), title="파일 검색 중", can_cancel=True
+        )
+        self.progress_dialog.set_indeterminate("파일을 검색하는 중...")
 
-        # 매칭되는 파일 찾기
-        count = 0
-        for (
-            file_path,
-            dest_folder,
-            keyword,
-            match_mode,
-        ) in self.file_matcher.find_matching_files_generator(
-            source, active_rules, include_subfolders
-        ):
-            file_info = self.get_file_info(file_path, dest_folder, keyword, match_mode)
-            self.file_list_data.append(file_info)
+        # 백그라운드 스레드에서 스캔
+        self.is_scanning = True
+        self.scan_thread = threading.Thread(
+            target=self._scan_files_thread, args=(source, active_rules), daemon=True
+        )
+        self.scan_thread.start()
 
-            # 트리에 추가
-            item_id = self.file_tree.insert(
-                "",
-                "end",
-                # image=self.icon_manager.get_icon(file_info["filename"]),  # 아이콘 추가
-                values=(
-                    "✓",  # 기본적으로 체크
-                    file_info["filename"],
-                    file_info["size"],
-                    file_info["modified"],
-                    file_info["rule"],
-                    file_info["destination"],
+    def _scan_files_thread(self, source, active_rules):
+        """백그라운드에서 파일 스캔"""
+        try:
+            include_subfolders = self.callbacks.get(
+                "get_subfolder_option", lambda: True
+            )()
+
+            # 먼저 전체 파일 수 계산 (빠른 추정)
+            total_estimate = self._estimate_file_count(source, include_subfolders)
+
+            # 진행률 트래커 설정
+            tracker = ProgressTracker(
+                total=total_estimate,
+                callback=lambda cur, tot, pct, msg: self.frame.after(
+                    0, self._update_scan_progress, cur, tot, msg
                 ),
             )
 
-            # 체크박스 상태 저장
-            self.file_vars[item_id] = tk.BooleanVar(value=True)
-            count += 1
+            batch = []
+            batch_size = 100
 
-        # 파일 목록을 모두 로드한 후
-        self.file_count_label.config(text=f"({count}개 파일)")
-        self.callbacks.get("update_stats", lambda: None)()
+            for (
+                file_path,
+                dest_folder,
+                keyword,
+                match_mode,
+            ) in self.file_matcher.find_matching_files_generator(
+                source, active_rules, include_subfolders
+            ):
 
-        # 확장자와 규칙 필터 옵션 업데이트
-        self.update_extension_filter_options()
+                # 취소 확인
+                if self.progress_dialog.cancelled:
+                    break
+
+                # 캐시된 정보 사용
+                file_info = self._get_file_info_cached(
+                    file_path, dest_folder, keyword, match_mode
+                )
+                batch.append(file_info)
+
+                # 배치 처리
+                if len(batch) >= batch_size:
+                    self.frame.after(0, self._add_files_batch, batch.copy())
+                    batch.clear()
+                    tracker.update(
+                        batch_size, f"{len(self.file_list_data)}개 파일 발견"
+                    )
+
+            # 남은 파일 처리
+            if batch:
+                self.frame.after(0, self._add_files_batch, batch)
+
+            # 완료
+            self.frame.after(0, self._scan_complete)
+
+        except Exception as e:
+            print(f"파일 스캔 오류: {e}")
+            self.frame.after(0, self._scan_error, str(e))
+        finally:
+            self.is_scanning = False
+
+    def _estimate_file_count(self, source, include_subfolders):
+        """파일 수 추정 (빠른 계산)"""
+        count = 0
+        
+        
+        
+        
+        
+        
+        
 
     def get_file_info(self, file_path, dest_folder, keyword, match_mode):
         """파일 정보 가져오기"""

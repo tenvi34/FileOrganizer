@@ -7,11 +7,13 @@
 
 import os
 import shutil
+
 try:
     import send2trash
 except ImportError:  # pragma: no cover - fallback for environments without send2trash
     send2trash = None
 from typing import List, Tuple, Callable, Optional
+from src.utils.performance import copy_file_with_progress
 
 
 class FileProcessor:
@@ -53,10 +55,10 @@ class FileProcessor:
         success_count = 0
         error_count = 0
 
-        for (file_path, dest_folder, keyword, match_mode) in batch:
+        for file_path, dest_folder, keyword, match_mode in batch:
             try:
                 file_name = os.path.basename(file_path)
-                
+
                 if is_delete:
                     # 삭제 모드
                     if self._delete_file(file_path, is_permanent):
@@ -64,10 +66,18 @@ class FileProcessor:
                         success_count += 1
                     else:
                         error_count += 1
-                
+
                 else:
                     # 복사/이동 모드
-                    if self._copy_or_move_file(file_path, dest_folder, file_name, is_copy, keyword, match_mode, operation):
+                    if self._copy_or_move_file(
+                        file_path,
+                        dest_folder,
+                        file_name,
+                        is_copy,
+                        keyword,
+                        match_mode,
+                        operation,
+                    ):
                         success_count += 1
                     else:
                         error_count += 1
@@ -77,14 +87,14 @@ class FileProcessor:
                 error_count += 1
 
         return success_count, error_count
-    
+
     def _delete_file(self, file_path: str, is_permanent: bool) -> bool:
         """파일 삭제
-        
+
         Args:
             file_path: 파일 경로
             is_permanent: 영구 삭제 여부
-            
+
         Returns:
             성공 여부
         """
@@ -106,9 +116,14 @@ class FileProcessor:
                 if os.name == "nt":
                     try:
                         import subprocess
+
                         if os.name == "nt":
                             # Windows
-                            subprocess.run(['cmd', '/c', 'del', '/f', '/q', file_path], check=True, capture_output=True)
+                            subprocess.run(
+                                ["cmd", "/c", "del", "/f", "/q", file_path],
+                                check=True,
+                                capture_output=True,
+                            )
                         else:
                             # macOS/Linux - 그냥 os.remove 사용
                             os.remove(file_path)
@@ -128,17 +143,74 @@ class FileProcessor:
                     os.remove(normalized_path)
                 return True
             except Exception as e:
-                self.log(
-                    f"❌ 삭제 실패: {file_name} - {type(e).__name__}: {str(e)}"
-                )
+                self.log(f"❌ 삭제 실패: {file_name} - {type(e).__name__}: {str(e)}")
                 self.log(f"   경로: {file_path}")
                 return False
-            
-    def _copy_or_move_file(self, file_path: str, dest_folder: str, file_name: str,
-                          is_copy: bool, keyword: str, match_mode: str, 
-                          operation: str) -> bool:
-        """파일 복사 또는 이동
-        
+
+    # def _copy_or_move_file(
+    #     self,
+    #     file_path: str,
+    #     dest_folder: str,
+    #     file_name: str,
+    #     is_copy: bool,
+    #     keyword: str,
+    #     match_mode: str,
+    #     operation: str,
+    # ) -> bool:
+    #     """파일 복사 또는 이동
+
+    #     Args:
+    #         file_path: 원본 파일 경로
+    #         dest_folder: 대상 폴더
+    #         file_name: 파일명
+    #         is_copy: 복사 여부
+    #         keyword: 매칭 키워드
+    #         match_mode: 매칭 모드
+    #         operation: 작업 이름
+
+    #     Returns:
+    #         성공 여부
+    #     """
+    #     try:
+    #         # 대상 폴더가 없으면 생성
+    #         if not os.path.exists(dest_folder):
+    #             os.makedirs(dest_folder)
+    #             self.log(f"폴더 생성: {dest_folder}")
+
+    #         # 대상 경로 생성
+    #         dest_path = os.path.join(dest_folder, file_name)
+
+    #         # 동일한 파일명이 있는 경우 처리
+    #         if os.path.exists(dest_path):
+    #             dest_path = self._get_unique_path(dest_path)
+
+    #         # 파일 복사 또는 이동
+    #         if is_copy:
+    #             shutil.copy2(file_path, dest_path)
+    #         else:
+    #             shutil.move(file_path, dest_path)
+
+    #         self.log(
+    #             f"{operation} 완료: {file_name} → {dest_folder} (규칙: {keyword}/{match_mode})"
+    #         )
+    #         return True
+
+    #     except Exception as e:
+    #         self.log(f"❌ {operation} 실패: {file_name} - {str(e)}")
+    #         return False
+
+    def _copy_or_move_file(
+        self,
+        file_path: str,
+        dest_folder: str,
+        file_name: str,
+        is_copy: bool,
+        keyword: str,
+        match_mode: str,
+        operation: str,
+    ) -> bool:
+        """파일 복사 또는 이동 - 성능 개선 버전
+
         Args:
             file_path: 원본 파일 경로
             dest_folder: 대상 폴더
@@ -147,7 +219,7 @@ class FileProcessor:
             keyword: 매칭 키워드
             match_mode: 매칭 모드
             operation: 작업 이름
-            
+
         Returns:
             성공 여부
         """
@@ -156,55 +228,82 @@ class FileProcessor:
             if not os.path.exists(dest_folder):
                 os.makedirs(dest_folder)
                 self.log(f"폴더 생성: {dest_folder}")
-            
+
             # 대상 경로 생성
             dest_path = os.path.join(dest_folder, file_name)
-            
+
             # 동일한 파일명이 있는 경우 처리
             if os.path.exists(dest_path):
                 dest_path = self._get_unique_path(dest_path)
-                
+
+            # 파일 크기 확인
+            file_size = os.path.getsize(file_path)
+
             # 파일 복사 또는 이동
             if is_copy:
-                shutil.copy2(file_path, dest_path)
+                if file_size > 50 * 1024 * 1024:  # 50MB 이상
+                    # 대용량 파일은 진행률 표시
+                    self.log(
+                        f"대용량 파일 복사 중: {file_name *{self.format_file_size(file_size)}}"
+                    )
+
+                    def progress_callback(copied, total, percent):
+                        if percent % 10 == 0:  # 10% 단위로 로그 표시
+                            self.log(
+                                f"  → {percent}% 완료 ({self.format_file_size(copied)}/{self.format_file_size(total)})"
+                            )
+
+                    copy_file_with_progress(file_path, dest_path, progress_callback)
+                else:
+                    shutil.copy2(file_path, dest_path)
             else:
                 shutil.move(file_path, dest_path)
-                
-            self.log(f"{operation} 완료: {file_name} → {dest_folder} (규칙: {keyword}/{match_mode})")
+
+            self.log(
+                f"{operation} 완료: {file_name} → {dest_folder} (규칙: {keyword}/{match_mode})"
+            )
             return True
-            
+
         except Exception as e:
             self.log(f"❌ {operation} 실패: {file_name} - {str(e)}")
             return False
-        
+
+    def format_file_size(self, size):
+        """파일 크기 포맷팅"""
+        for unit in ["B", "KB", "MB", "GB"]:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"
+
     def _get_unique_path(self, dest_path: str) -> str:
         """중복되지 않는 파일 경로 생성
-        
+
         Args:
             dest_path: 원래 대상 경로
-            
+
         Returns:
             유니크한 파일 경로
         """
         dir_path = os.path.dirname(dest_path)
         file_name = os.path.basename(dest_path)
         base_name, ext = os.path.splitext(file_name)
-        
+
         counter = 1
         while os.path.exists(dest_path):
             new_name = f"{base_name}_{counter}{ext}"
             dest_path = os.path.join(dir_path, new_name)
             counter += 1
-            
+
         return dest_path
-    
+
     @staticmethod
     def safe_path(path: str) -> str:
         """안전한 경로 변환 (Windows 긴 경로 처리)
-        
+
         Args:
             path: 원본 경로
-            
+
         Returns:
             변환된 경로
         """

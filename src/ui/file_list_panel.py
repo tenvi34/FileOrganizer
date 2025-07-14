@@ -39,7 +39,7 @@ class FileListPanel:
         # self.icon_manager = IconManager()
 
         # 성능 개선
-        self.file_cache = FileInfoCache
+        self.file_cache = FileInfoCache()
         self.scan_thread = None
         self.is_scanning = False
 
@@ -399,13 +399,126 @@ class FileListPanel:
     def _estimate_file_count(self, source, include_subfolders):
         """파일 수 추정 (빠른 계산)"""
         count = 0
+        try:
+            if include_subfolders:
+                for root, dirs, files in os.walk(source):
+                    count += len(files)
+                    # 너무 깊으면 추정치 사용
+                    if count > 1000:
+                        # 현재까지의 비율로 추정
+                        return count * 2
+            else:
+                count = len(
+                    [
+                        f
+                        for f in os.listdir(source)
+                        if os.path.isfile(os.path.join(source, f))
+                    ]
+                )
+        except:
+            return 100  # 기본값
+
+        return max(count, 100)
+
+    def _get_file_info_cached(self, file_path, dest_folder, keyword, match_mode):
+        """캐시를 사용한 파일 정보 가져오기"""
+        # 캐시 확인
+        cached_info = self.file_cache.get(file_path)
+
+        if cached_info:
+            file_stat_info = cached_info
+        else:
+            # 새로 가져오기
+            try:
+                file_stat = os.stat(file_path)
+                file_stat_info = {
+                    "size": file_stat.st_size,
+                    "modified": file_stat.st_mtime,
+                }
+                self.file_cache.set(file_path, file_stat_info)
+            except:
+                file_stat_info = {"size": 0, "modified": 0}
+
+        # 파일 정보 생성
+        size = self.format_file_size(file_stat_info["size"])
+        modified = datetime.fromtimestamp(file_stat_info["modified"]).strftime(
+            "%Y-%m-%d %H:%M"
+        )
+
+        is_delete = self.callbacks.get("is_delete_mode", lambda: False)()
+        is_permanent = self.callbacks.get("is_permanent_delete", lambda: False)()
+
+        if is_delete:
+            destination = "삭제" if not is_permanent else "영구삭제"
+        else:
+            destination = os.path.basename(dest_folder) if dest_folder else ""
+
+        return {
+            "path": file_path,
+            "filename": os.path.basename(file_path),
+            "size": size,
+            "modified": modified,
+            "rule": f"{keyword} ({match_mode})",
+            "keyword": keyword,
+            "match_mode": match_mode,
+            "destination": destination,
+            "dest_folder": dest_folder,
+        }
+
+    def _add_files_batch(self, files):
+        """파일 배치 추가"""
+        for file_info in files:
+            self.file_list_data.append(file_info)
+
+            # 트리에 추가
+            item_id = self.file_tree.insert(
+                "",
+                "end",
+                values=(
+                    "✓",
+                    file_info["filename"],
+                    file_info["size"],
+                    file_info["modified"],
+                    file_info["rule"],
+                    file_info["destination"],
+                ),
+            )
+            
+            self.file_vars[item_id] = tk.BooleanVar(value=True)
         
+        # 카운트 업데이트
+        self.file_count_label.config(text=f"({len(self.file_list_data)}개 파일)")
+        self.callbacks.get('update_stats', lambda: None)()
+
+    def _update_scan_progress(self, current, total, message):
+        """스캔 진행률 업데이트"""
+        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+            self.progress_dialog.update_progress(
+                current, total, 
+                "파일을 검색하는 중...", 
+                message
+            )
+
+    def _scan_complete(self):
+        """스캔 완료"""
+        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+            self.progress_dialog.close()
+            self.progress_dialog = None
         
+        # 필터 옵션 업데이트
+        self.update_extension_filter_options()
         
+        # 최종 통계 업데이트
+        self.callbacks.get('update_stats', lambda: None)()
+
+    def _scan_error(self, error_msg):
+        """스캔 오류"""
+        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+            self.progress_dialog.close()
+            self.progress_dialog = None
         
-        
-        
-        
+        from tkinter import messagebox
+        messagebox.showerror("오류", f"파일 검색 중 오류 발생:\n{error_msg}")
 
     def get_file_info(self, file_path, dest_folder, keyword, match_mode):
         """파일 정보 가져오기"""

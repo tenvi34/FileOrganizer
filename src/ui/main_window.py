@@ -412,17 +412,19 @@ class MainWindow:
         thread.start()
 
     def _organize_files_thread(self, selected_files):
-        """파일 정리 스레드"""
+        """파일 정리 스레드 - 성능 개선 버전"""
         self.status_panel.clear_log()
         self.log("=== 파일 정리 시작 ===")
 
         # UI 비활성화
         self.root.after(0, self.disable_ui)
 
+        # 진행률 다이얼로그 표시
+        self.root.after(0, self._show_progress_dialog, len(selected_files))
+
         # 진행률 초기화
         self.status_panel.reset_progress()
         self.status_panel.reset_stats()
-        self.status_panel.update_progress(0, len(selected_files), "준비 중...")
 
         operation = self.settings_panel.operation_var.get()
         is_delete = operation == "delete"
@@ -432,31 +434,49 @@ class MainWindow:
         success_count = 0
         error_count = 0
 
+        # 배치 처리를 위한 설정
+        batch_size = 10
+        batch = []
+
         # 파일 처리
         for i, file_info in enumerate(selected_files):
+            # 취소 확인
+            if (
+                hasattr(self, "operation_progress")
+                and self.operation_progress.cancelled
+            ):
+                self.log("작업이 취소되었습니다.")
+                break
+
             file_path = file_info["path"]
             dest_folder = file_info["dest_folder"]
             keyword = file_info["keyword"]
             match_mode = file_info["match_mode"]
 
-            batch = [(file_path, dest_folder, keyword, match_mode)]
+            batch.append((file_path, dest_folder, keyword, match_mode))
 
-            success, error = self.file_processor.process_batch(
-                batch,
-                is_delete,
-                is_permanent,
-                is_copy,
-                "삭제" if is_delete else ("복사" if is_copy else "이동"),
-            )
+            # 배치 처리
+            if len(batch) >= batch_size or i == len(selected_files) - 1:
+                success, error = self.file_processor.process_batch(
+                    batch,
+                    is_delete,
+                    is_permanent,
+                    is_copy,
+                    "삭제" if is_delete else ("복사" if is_copy else "이동"),
+                )
 
-            success_count += success
-            error_count += error
+                success_count += success
+                error_count += error
+                batch.clear()
 
-            # 진행률 업데이트
-            self.status_panel.update_progress(
+            # 진행률 업데이트 (UI 스레드에서)
+            self.root.after(
+                0,
+                self._update_operation_progress,
                 i + 1,
                 len(selected_files),
                 f"처리 중... ({i + 1}/{len(selected_files)})",
+                os.path.basename(file_path),
             )
 
             # 통계 업데이트
@@ -477,10 +497,8 @@ class MainWindow:
         self.log(f"성공: {success_count}개 파일")
         self.log(f"실패: {error_count}개 파일")
 
-        # 진행률 완료
-        self.status_panel.update_progress(
-            len(selected_files), len(selected_files), "작업 완료!"
-        )
+        # 진행률 다이얼로그 닫기
+        self.root.after(0, self._close_progress_dialog)
 
         # UI 활성화
         self.root.after(0, self.enable_ui)
@@ -496,6 +514,28 @@ class MainWindow:
                 f"파일 정리가 완료되었습니다.\n\n성공: {success_count}개\n실패: {error_count}개",
             ),
         )
+
+    def _show_progress_dialog(self, total_files):
+        """진행률 다이얼로그 표시"""
+        from src.ui.progress_dialog import ProgressDialog
+
+        self.operation_progress = ProgressDialog(
+            self.root, title="파일 정리 중", can_cancel=True
+        )
+        self.operation_progress.update_progress(
+            0, total_files, "작업을 시작하는 중...", ""
+        )
+
+    def _update_operation_progress(self, current, total, message, detail):
+        """작업 진행률 업데이트"""
+        if hasattr(self, "operation_progress") and self.operation_progress:
+            self.operation_progress.update_progress(current, total, message, detail)
+
+    def _close_progress_dialog(self):
+        """진행률 다이얼로그 닫기"""
+        if hasattr(self, "operation_progress") and self.operation_progress:
+            self.operation_progress.close()
+            self.operation_progress = None
 
     def disable_ui(self):
         """UI 비활성화"""

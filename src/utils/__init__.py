@@ -2,9 +2,15 @@
 from .config import ConfigManager
 from .logger import Logger
 from .validators import Validator
-try:
-    from .icon_manager import IconManager
-except Exception:  # pragma: no cover - optional dependency (Pillow)
-    IconManager = None
+from .icon_manager import IconManager
+from .performance import FileInfoCache, ProgressTracker, copy_file_with_progress
 
-__all__ = ["ConfigManager", "Logger", "Validator", "IconManager"]
+__all__ = [
+    "ConfigManager", 
+    "Logger", 
+    "Validator", 
+    "IconManager",
+    "FileInfoCache",
+    "ProgressTracker",
+    "copy_file_with_progress"
+]

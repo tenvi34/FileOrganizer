@@ -34,3 +34,11 @@ if hasattr(__builtins__, "WindowsError"):
 else:
     FILE_ATTRIBUTE_HIDDEN = None
     FILE_ATTRIBUTE_SYSTEM = None
+
+# 성능 관련 설정
+SCAN_BATCH_SIZE = 100  # 파일 스캔 배치 크기
+PROCESS_BATCH_SIZE = 10  # 파일 처리 배치 크기
+CACHE_SIZE = 5000  # 파일 정보 캐시 크기
+CACHE_TTL = 60  # 캐시 유효 시간 (초)
+LARGE_FILE_THRESHOLD = 50 * 1024 * 1024  # 대용량 파일 기준 (50MB)
+PROGRESS_UPDATE_INTERVAL = 0.1  # 진행률 업데이트 간격 (초)

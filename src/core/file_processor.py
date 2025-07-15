@@ -12,8 +12,13 @@ try:
     import send2trash
 except ImportError:  # pragma: no cover - fallback for environments without send2trash
     send2trash = None
-from typing import List, Tuple, Callable, Optional
+from typing import List, Tuple, Callable, Optional, Any
 from src.utils.performance import copy_file_with_progress
+from src.utils.performance import (
+    copy_file_with_progress_optimized,
+    FileOperationQueue,
+    verify_copy,
+)
 
 
 class FileProcessor:
@@ -147,58 +152,6 @@ class FileProcessor:
                 self.log(f"   경로: {file_path}")
                 return False
 
-    # def _copy_or_move_file(
-    #     self,
-    #     file_path: str,
-    #     dest_folder: str,
-    #     file_name: str,
-    #     is_copy: bool,
-    #     keyword: str,
-    #     match_mode: str,
-    #     operation: str,
-    # ) -> bool:
-    #     """파일 복사 또는 이동
-
-    #     Args:
-    #         file_path: 원본 파일 경로
-    #         dest_folder: 대상 폴더
-    #         file_name: 파일명
-    #         is_copy: 복사 여부
-    #         keyword: 매칭 키워드
-    #         match_mode: 매칭 모드
-    #         operation: 작업 이름
-
-    #     Returns:
-    #         성공 여부
-    #     """
-    #     try:
-    #         # 대상 폴더가 없으면 생성
-    #         if not os.path.exists(dest_folder):
-    #             os.makedirs(dest_folder)
-    #             self.log(f"폴더 생성: {dest_folder}")
-
-    #         # 대상 경로 생성
-    #         dest_path = os.path.join(dest_folder, file_name)
-
-    #         # 동일한 파일명이 있는 경우 처리
-    #         if os.path.exists(dest_path):
-    #             dest_path = self._get_unique_path(dest_path)
-
-    #         # 파일 복사 또는 이동
-    #         if is_copy:
-    #             shutil.copy2(file_path, dest_path)
-    #         else:
-    #             shutil.move(file_path, dest_path)
-
-    #         self.log(
-    #             f"{operation} 완료: {file_name} → {dest_folder} (규칙: {keyword}/{match_mode})"
-    #         )
-    #         return True
-
-    #     except Exception as e:
-    #         self.log(f"❌ {operation} 실패: {file_name} - {str(e)}")
-    #         return False
-
     def _copy_or_move_file(
         self,
         file_path: str,
@@ -209,20 +162,7 @@ class FileProcessor:
         match_mode: str,
         operation: str,
     ) -> bool:
-        """파일 복사 또는 이동 - 성능 개선 버전
-
-        Args:
-            file_path: 원본 파일 경로
-            dest_folder: 대상 폴더
-            file_name: 파일명
-            is_copy: 복사 여부
-            keyword: 매칭 키워드
-            match_mode: 매칭 모드
-            operation: 작업 이름
-
-        Returns:
-            성공 여부
-        """
+        """파일 복사 또는 이동 - 고급 최적화 버전"""
         try:
             # 대상 폴더가 없으면 생성
             if not os.path.exists(dest_folder):
@@ -241,21 +181,32 @@ class FileProcessor:
 
             # 파일 복사 또는 이동
             if is_copy:
-                if file_size > 50 * 1024 * 1024:  # 50MB 이상
-                    # 대용량 파일은 진행률 표시
-                    self.log(
-                        f"대용량 파일 복사 중: {file_name *{self.format_file_size(file_size)}}"
-                    )
+                # 설정 가져오기
+                use_verification = self.get_config("verify_copy", True)
+                use_multithread = self.get_config("multithread_copy", True)
 
-                    def progress_callback(copied, total, percent):
-                        if percent % 10 == 0:  # 10% 단위로 로그 표시
-                            self.log(
-                                f"  → {percent}% 완료 ({self.format_file_size(copied)}/{self.format_file_size(total)})"
-                            )
+                # 진행률 콜백
+                def progress_callback(copied, total, percent, detail=""):
+                    if percent % 5 == 0:  # 5% 단위로 로그
+                        size_info = f"{self.format_file_size(copied)}/{self.format_file_size(total)}"
+                        self.log(f"  → {file_name}: {percent}% ({size_info}) {detail}")
 
-                    copy_file_with_progress(file_path, dest_path, progress_callback)
-                else:
-                    shutil.copy2(file_path, dest_path)
+                # 최적화된 복사 실행
+                success, error = copy_file_with_progress_optimized(
+                    file_path,
+                    dest_path,
+                    progress_callback=(
+                        progress_callback if file_size > 50 * 1024 * 1024 else None
+                    ),
+                    verify=use_verification
+                    and file_size > 100 * 1024 * 1024,  # 100MB 이상만 검증
+                    use_multithread=use_multithread
+                    and file_size > 1024 * 1024 * 1024,  # 1GB 이상
+                )
+
+                if not success:
+                    raise Exception(error or "복사 실패")
+
             else:
                 shutil.move(file_path, dest_path)
 
@@ -318,3 +269,52 @@ class FileProcessor:
             if len(abs_path) > 260:
                 return "\\\\?\\" + abs_path
         return os.path.abspath(path)
+
+    def get_config(self, key: str, default: Any) -> Any:
+        """설정 값 가져오기"""
+        # TODO: 실제 설정 시스템과 연동
+        # 임시로 기본값 반환
+        config = {"verify_copy": True, "multithread_copy": True, "quick_verify": True}
+        return config.get(key, default)
+
+    # 대량 작업을 위한 새 메서드 추가
+    def process_batch_optimized(
+        self,
+        batch: List[Tuple[str, str, str, str]],
+        is_delete: bool,
+        is_permanent: bool,
+        is_copy: bool,
+        operation: str,
+        progress_callback: Callable = None,
+    ) -> Tuple[int, int]:
+        """최적화된 배치 처리"""
+
+        # 파일 작업 큐 생성
+        queue = FileOperationQueue(max_concurrent=3)
+
+        # 작업 추가
+        for file_path, dest_folder, keyword, match_mode in batch:
+            if is_delete:
+                queue.add_operation("delete", file_path)
+            else:
+                file_name = os.path.basename(file_path)
+                dest_path = os.path.join(dest_folder, file_name)
+
+                if is_copy:
+                    queue.add_operation("copy", file_path, dest_path)
+                else:
+                    queue.add_operation("move", file_path, dest_path)
+
+        # 큐 처리
+        queue.process_queue(progress_callback)
+
+        success_count = len(queue.completed)
+        error_count = len(queue.failed)
+
+        # 실패한 작업 로그
+        for failed in queue.failed:
+            self.log(
+                f"❌ 실패: {os.path.basename(failed['src'])} - {failed.get('error', '알 수 없는 오류')}"
+            )
+
+        return success_count, error_count

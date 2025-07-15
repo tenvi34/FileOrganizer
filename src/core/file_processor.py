@@ -5,12 +5,13 @@
 파일 이동/복사/삭제 처리 로직
 """
 
+import json
 import os
 import shutil
 
 try:
     import send2trash
-except ImportError:  # pragma: no cover - fallback for environments without send2trash
+except ImportError:
     send2trash = None
 from typing import List, Tuple, Callable, Optional, Any
 from src.utils.performance import copy_file_with_progress
@@ -19,6 +20,7 @@ from src.utils.performance import (
     FileOperationQueue,
     verify_copy,
 )
+from src.constants import CONFIG_FILE
 
 
 class FileProcessor:
@@ -272,10 +274,23 @@ class FileProcessor:
 
     def get_config(self, key: str, default: Any) -> Any:
         """설정 값 가져오기"""
-        # TODO: 실제 설정 시스템과 연동
-        # 임시로 기본값 반환
-        config = {"verify_copy": True, "multithread_copy": True, "quick_verify": True}
-        return config.get(key, default)
+        # 고급 설정 파일에서 읽기
+        settings_file = os.path.join(
+            os.path.dirname(CONFIG_FILE), "advanced_settings.json"
+        )
+
+        if os.path.exists(settings_file):
+            try:
+                with open(settings_file, "r", encoding="utf-8") as f:
+                    settings = json.load(f)
+                    return settings.get(key, default)
+            except:
+                pass
+
+        # 설정 파일이 없으면 constants에서 가져오기
+        from src.constants import ADVANCED_SETTINGS
+
+        return ADVANCED_SETTINGS.get(key, default)
 
     # 대량 작업을 위한 새 메서드 추가
     def process_batch_optimized(

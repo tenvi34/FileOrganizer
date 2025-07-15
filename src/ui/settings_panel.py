@@ -5,11 +5,15 @@
 설정 패널 UI
 """
 
+import json
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from src.constants import DEFAULT_MATCH_MODE, MATCH_MODES
+from src.ui.settings_dialog import AdvancedSettingsDialog
+from src.constants import CONFIG_FILE
+from src.utils.performance import FileInfoCache
 
 
 class SettingsPanel:
@@ -238,17 +242,24 @@ class SettingsPanel:
         config_button_frame = ttk.Frame(config_frame)
         config_button_frame.pack(fill=tk.X)
 
-        ttk.Button(
-            config_button_frame, text="설정 내보내기", command=self.export_config
-        ).pack(side=tk.LEFT, padx=5)
+        # 버튼 4개 생성
+        buttons = [
+            ("설정 내보내기", self.export_config),
+            ("설정 불러오기", self.import_config),
+            ("설정 초기화", self.reset_config),
+            ("고급 설정...", self.show_advanced_settings),
+        ]
 
-        ttk.Button(
-            config_button_frame, text="설정 불러오기", command=self.import_config
-        ).pack(side=tk.LEFT, padx=5)
+        for idx, (txt, cmd) in enumerate(buttons):
+            row = idx // 2      # 2개씩 한 줄에
+            col = idx % 2
+            ttk.Button(
+                config_button_frame, text=txt, command=cmd
+            ).grid(row=row, column=col, padx=5, pady=5, sticky="ew")
 
-        ttk.Button(
-            config_button_frame, text="설정 초기화", command=self.reset_config
-        ).pack(side=tk.LEFT, padx=5)
+        # 각 컬럼이 넓이 고정 분배
+        config_button_frame.columnconfigure(0, weight=1)
+        config_button_frame.columnconfigure(1, weight=1)
 
         # 작업 버튼
         action_frame = ttk.Frame(options_frame)
@@ -449,6 +460,7 @@ class SettingsPanel:
                         "default_operation": self.operation_var.get(),
                         "recent_folders": list(self.recent_listbox.get(0, tk.END)),
                     },
+                    "advanced_settings": self.get_advanced_settings(),  # 고급 설정 추가
                 }
 
                 with open(filename, "w", encoding="utf-8") as f:
@@ -521,6 +533,15 @@ class SettingsPanel:
                             if os.path.exists(folder):  # 존재하는 폴더만 추가
                                 self.recent_listbox.insert(tk.END, folder)
 
+                # 고급 설정 불러오기
+                if "advanced_settings" in import_data:
+                    try:
+                        self.apply_advanced_settings(import_data["advanced_settings"])
+                    except Exception as e:
+                        messagebox.showwarning(
+                            "경고", f"고급 설정 적용 중 오류가 발생했습니다:\n{str(e)}"
+                        )
+
                 messagebox.showinfo("성공", "설정을 불러왔습니다.")
                 if self.callbacks.get("log"):
                     self.callbacks["log"](f"설정 불러오기 완료: {filename}")
@@ -566,6 +587,123 @@ class SettingsPanel:
             # 파일 목록 새로고침
             if self.callbacks.get("refresh_files"):
                 self.callbacks["refresh_files"]()
+
+    def show_advanced_settings(self):
+        """고급 설정 다이얼로그 표시"""
+        # 현재 설정 가져오기
+        current_settings = self.get_advanced_settings()
+
+        # 다이얼로그 표시
+        dialog = AdvancedSettingsDialog(self.frame.winfo_toplevel(), current_settings)
+        self.frame.wait_window(dialog)
+
+        # 결과 적용
+        if dialog.result:
+            self.apply_advanced_settings(dialog.result)
+            if self.callbacks.get("log"):
+                self.callbacks["log"]("고급 설정이 변경되었습니다.")
+
+    def get_advanced_settings(self):
+        """현재 고급 설정 가져오기"""
+        # 설정 파일 경로
+        settings_file = os.path.join(
+            os.path.dirname(CONFIG_FILE), "advanced_settings.json"
+        )
+
+        # 기본 설정
+        default_settings = {
+            "multithread_copy": True,
+            "thread_count": 4,
+            "cache_size": 5000,
+            "batch_size": 100,
+            "verify_copy": True,
+            "verify_method": "quick",
+            "verify_fail_action": "retry",
+            "network_optimize": True,
+            "network_chunk_size": "50MB",
+            "network_timeout": 120,
+        }
+
+        # 설정 파일이 있으면 로드
+        if os.path.exists(settings_file):
+            try:
+                with open(settings_file, "r", encoding="utf-8") as f:
+                    loaded_settings = json.load(f)
+                    # 기본 설정과 병합 (누락된 키 처리)
+                    default_settings.update(loaded_settings)
+            except Exception as e:
+                if self.callbacks.get("log"):
+                    self.callbacks["log"](f"고급 설정 로드 실패: {str(e)}")
+
+        # 환경 변수로 오버라이드 (선택사항)
+        if os.environ.get("FILE_ORGANIZER_MULTITHREAD"):
+            default_settings["multithread_copy"] = (
+                os.environ.get("FILE_ORGANIZER_MULTITHREAD").lower() == "true"
+            )
+
+        return default_settings
+
+    def apply_advanced_settings(self, settings):
+        """고급 설정 적용"""
+        # 설정 파일 경로
+        settings_dir = os.path.dirname(CONFIG_FILE)
+        if not os.path.exists(settings_dir):
+            os.makedirs(settings_dir)
+
+        settings_file = os.path.join(settings_dir, "advanced_settings.json")
+
+        try:
+            # 설정 저장
+            with open(settings_file, "w", encoding="utf-8") as f:
+                json.dump(settings, f, ensure_ascii=False, indent=2)
+
+            # 전역 상수 업데이트 (즉시 적용)
+            from src import constants
+
+            # 성능 설정 적용
+            constants.SCAN_BATCH_SIZE = settings.get("batch_size", 100)
+            constants.CACHE_SIZE = settings.get("cache_size", 5000)
+
+            # 네트워크 청크 크기 파싱
+            chunk_size_str = settings.get("network_chunk_size", "50MB")
+            if chunk_size_str.endswith("MB"):
+                chunk_size = int(chunk_size_str[:-2]) * 1024 * 1024
+            else:
+                chunk_size = 50 * 1024 * 1024
+
+            # ADVANCED_SETTINGS 업데이트
+            constants.ADVANCED_SETTINGS.update(
+                {
+                    "multithread_copy": settings.get("multithread_copy", True),
+                    "thread_count": settings.get("thread_count", 4),
+                    "verify_copy": settings.get("verify_copy", True),
+                    "verify_method": settings.get("verify_method", "quick"),
+                    "verify_fail_action": settings.get("verify_fail_action", "retry"),
+                    "network_optimize": settings.get("network_optimize", True),
+                    "network_chunk_size": chunk_size,
+                    "network_timeout": settings.get("network_timeout", 120),
+                }
+            )
+
+            # 캐시 초기화 (새 설정 적용)
+            if hasattr(self, "file_list_panel") and self.file_list_panel:
+                # 캐시 크기 변경 시 재생성
+                self.file_list_panel.file_cache = FileInfoCache(
+                    max_size=settings.get("cache_size", 5000)
+                )
+
+            # 로그
+            if self.callbacks.get("log"):
+                self.callbacks["log"]("고급 설정이 저장되었습니다.")
+
+            # 설정 변경 이벤트 발생 (다른 컴포넌트에 알림)
+            if self.callbacks.get("on_settings_changed"):
+                self.callbacks["on_settings_changed"](settings)
+
+        except Exception as e:
+            if self.callbacks.get("log"):
+                self.callbacks["log"](f"고급 설정 저장 실패: {str(e)}")
+            raise
 
     def get_widget(self):
         """위젯 반환"""

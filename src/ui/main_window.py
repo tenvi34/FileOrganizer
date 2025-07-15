@@ -10,7 +10,7 @@ import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
-from datetime import datetime
+from datetime import datetime, time
 
 from src.constants import *
 from src.core import FileMatcher, FileProcessor, RuleManager
@@ -438,6 +438,21 @@ class MainWindow:
         batch_size = 10
         batch = []
 
+        # 통계 초기화
+        stats = {
+            "total_size": 0,
+            "processed_size": 0,
+            "start_time": time.time(),
+            "file_times": [],
+        }
+
+        # 전체 크기 계산
+        for file_info in selected_files:
+            try:
+                stats["total_size"] += os.path.getsize(file_info["path"])
+            except:
+                pass
+
         # 파일 처리
         for i, file_info in enumerate(selected_files):
             # 취소 확인
@@ -497,6 +512,19 @@ class MainWindow:
         self.log(f"성공: {success_count}개 파일")
         self.log(f"실패: {error_count}개 파일")
 
+        # 처리 후 상세 통계 로그
+        elapsed_time = time.time() - stats["start_time"]
+        avg_speed = stats["processed_size"] / elapsed_time if elapsed_time > 0 else 0
+
+        self.log(f"\n=== 상세 통계 ===")
+        self.log(f"전체 처리 시간: {self.format_time(elapsed_time)}")
+        self.log(f"처리된 데이터: {self.format_file_size(stats['processed_size'])}")
+        self.log(f"평균 속도: {self.format_file_size(avg_speed)}/초")
+
+        if stats["file_times"]:
+            avg_file_time = sum(stats["file_times"]) / len(stats["file_times"])
+            self.log(f"파일당 평균 시간: {avg_file_time:.2f}초")
+
         # 진행률 다이얼로그 닫기
         self.root.after(0, self._close_progress_dialog)
 
@@ -536,6 +564,17 @@ class MainWindow:
         if hasattr(self, "operation_progress") and self.operation_progress:
             self.operation_progress.close()
             self.operation_progress = None
+
+    def format_time(self, seconds):
+        """시간 포맷팅"""
+        if seconds < 60:
+            return f"{seconds:.1f}초"
+        elif seconds < 3600:
+            minutes = seconds / 60
+            return f"{minutes:.1f}분"
+        else:
+            hours = seconds / 3600
+            return f"{hours:.1f}시간"
 
     def disable_ui(self):
         """UI 비활성화"""

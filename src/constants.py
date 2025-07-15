@@ -42,3 +42,34 @@ CACHE_SIZE = 5000  # 파일 정보 캐시 크기
 CACHE_TTL = 60  # 캐시 유효 시간 (초)
 LARGE_FILE_THRESHOLD = 50 * 1024 * 1024  # 대용량 파일 기준 (50MB)
 PROGRESS_UPDATE_INTERVAL = 0.1  # 진행률 업데이트 간격 (초)
+
+# 고급 성능 설정
+ADVANCED_SETTINGS = {
+    # 멀티스레드 설정
+    "multithread_copy": True,
+    "thread_count": 4,
+    "multithread_threshold": 1024 * 1024 * 1024,  # 1GB
+    # 캐시 설정
+    "cache_size": 5000,
+    "cache_ttl": 60,
+    # 배치 처리 설정
+    "scan_batch_size": 100,
+    "process_batch_size": 10,
+    # 검증 설정
+    "verify_copy": True,
+    "verify_method": "quick",  # 'quick' or 'full'
+    "verify_threshold": 100 * 1024 * 1024,  # 100MB
+    "verify_fail_action": "retry",  # 'retry', 'skip', 'abort'
+    # 네트워크 설정
+    "network_optimize": True,
+    "network_chunk_size": 50 * 1024 * 1024,  # 50MB
+    "network_timeout": 120,
+    # 청크 크기 (파일 크기별)
+    "chunk_sizes": {
+        "tiny": 512 * 1024,  # < 10MB
+        "small": 1024 * 1024,  # < 100MB
+        "medium": 10 * 1024 * 1024,  # < 1GB
+        "large": 50 * 1024 * 1024,  # < 10GB
+        "huge": 100 * 1024 * 1024,  # >= 10GB
+    },
+}

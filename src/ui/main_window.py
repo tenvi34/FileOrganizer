@@ -10,7 +10,8 @@ import sys
 import tkinter as tk
 from tkinter import ttk, messagebox
 import threading
-from datetime import datetime, time
+from datetime import datetime
+import time
 
 from src.constants import *
 from src.core import FileMatcher, FileProcessor, RuleManager
@@ -434,11 +435,9 @@ class MainWindow:
         success_count = 0
         error_count = 0
 
-        # 배치 처리를 위한 설정
-        batch_size = 10
-        batch = []
-
         # 통계 초기화
+        import time
+
         stats = {
             "total_size": 0,
             "processed_size": 0,
@@ -452,6 +451,10 @@ class MainWindow:
                 stats["total_size"] += os.path.getsize(file_info["path"])
             except:
                 pass
+
+        # 배치 처리를 위한 설정
+        batch_size = 10
+        batch = []
 
         # 파일 처리
         for i, file_info in enumerate(selected_files):
@@ -467,6 +470,13 @@ class MainWindow:
             dest_folder = file_info["dest_folder"]
             keyword = file_info["keyword"]
             match_mode = file_info["match_mode"]
+
+            # 파일 크기 추가
+            try:
+                file_size = os.path.getsize(file_path)
+                stats["processed_size"] += file_size
+            except:
+                pass
 
             batch.append((file_path, dest_folder, keyword, match_mode))
 
@@ -508,22 +518,22 @@ class MainWindow:
                 0, lambda e=error_count: self.status_panel.update_stat("error_count", e)
             )
 
+        # 처리 시간 계산
+        elapsed_time = time.time() - stats["start_time"]
+
         self.log(f"\n=== 작업 완료 ===")
         self.log(f"성공: {success_count}개 파일")
         self.log(f"실패: {error_count}개 파일")
 
-        # 처리 후 상세 통계 로그
-        elapsed_time = time.time() - stats["start_time"]
-        avg_speed = stats["processed_size"] / elapsed_time if elapsed_time > 0 else 0
-
-        self.log(f"\n=== 상세 통계 ===")
-        self.log(f"전체 처리 시간: {self.format_time(elapsed_time)}")
-        self.log(f"처리된 데이터: {self.format_file_size(stats['processed_size'])}")
-        self.log(f"평균 속도: {self.format_file_size(avg_speed)}/초")
-
-        if stats["file_times"]:
-            avg_file_time = sum(stats["file_times"]) / len(stats["file_times"])
-            self.log(f"파일당 평균 시간: {avg_file_time:.2f}초")
+        # 상세 통계 (stats가 있는 경우)
+        if stats["processed_size"] > 0:
+            self.log(f"\n=== 상세 통계 ===")
+            self.log(f"전체 처리 시간: {self.format_time(elapsed_time)}")
+            self.log(f"처리된 데이터: {self.format_file_size(stats['processed_size'])}")
+            avg_speed = (
+                stats["processed_size"] / elapsed_time if elapsed_time > 0 else 0
+            )
+            self.log(f"평균 속도: {self.format_file_size(avg_speed)}/초")
 
         # 진행률 다이얼로그 닫기
         self.root.after(0, self._close_progress_dialog)
@@ -564,6 +574,14 @@ class MainWindow:
         if hasattr(self, "operation_progress") and self.operation_progress:
             self.operation_progress.close()
             self.operation_progress = None
+
+    def format_file_size(self, size):
+        """파일 크기 포맷팅"""
+        for unit in ["B", "KB", "MB", "GB", "TB"]:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} PB"
 
     def format_time(self, seconds):
         """시간 포맷팅"""

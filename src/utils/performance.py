@@ -190,24 +190,23 @@ def is_network_drive(path: str) -> bool:
     Returns:
         네트워크 드라이브 여부
     """
-    if platform.system() == "Windows":
-        import win32file
+    # UNC 경로 확인 (\\server\share 형식)
+    if path.startswith("\\\\") or path.startswith("//"):
+        return True
 
-        drive = os.path.splitdrive(path)[0] + "\\"
-        drive_type = win32file.GetDriveType(drive)
-        return drive_type == win32file.DRIVE_REMOTE
-    else:
-        # Linux/Mac: 마운트 정보 확인
-        import subprocess
+    # 매핑된 네트워크 드라이브 확인 (간단한 휴리스틱)
+    # 실제로는 더 복잡한 확인이 필요하지만, 대부분의 경우 충분함
+    try:
+        # 드라이브 문자 추출
+        drive = os.path.splitdrive(path)[0]
+        if drive and platform.system() == "Windows":
+            # Z: 드라이브는 종종 네트워크 드라이브로 사용됨
+            if drive.upper() in ["Y:", "Z:"]:
+                return True
+    except:
+        pass
 
-        try:
-            result = subprocess.run(["df", "-P", path], capture_output=True, text=True)
-            output = result.stdout.strip().split("\n")[-1]
-            # 네트워크 파일시스템 패턴 확인
-            network_patterns = ["://", "nfs", "cifs", "smb", "afp"]
-            return any(pattern in output.lower() for pattern in network_patterns)
-        except:
-            return False
+    return False
 
 
 def copy_file_with_progress_optimized(

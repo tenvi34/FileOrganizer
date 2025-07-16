@@ -4,6 +4,7 @@ from .logger import Logger
 from .validators import Validator
 from .icon_manager import IconManager
 from .performance import FileInfoCache, ProgressTracker, copy_file_with_progress
+from .benchmark import PerformanceBenchmark
 
 __all__ = [
     "ConfigManager", 
@@ -12,5 +13,6 @@ __all__ = [
     "IconManager",
     "FileInfoCache",
     "ProgressTracker",
-    "copy_file_with_progress"
+    "copy_file_with_progress",
+    "PerformanceBenchmark"
 ]

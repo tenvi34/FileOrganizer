@@ -7,14 +7,18 @@ from .status_panel import StatusPanel
 from .menubar import MenuBar
 from .shortcuts import ShortcutManager
 from .progress_dialog import ProgressDialog
+from .settings_dialog import AdvancedSettingsDialog
+from .benchmark_dialog import BenchmarkDialog
 
 __all__ = [
-    'MainWindow', 
-    'LogWindow',
-    'SettingsPanel',
-    'FileListPanel',
-    'StatusPanel',
-    'MenuBar',
-    'ShortcutManager',
-    'ProgressDialog'
+    "MainWindow",
+    "LogWindow",
+    "SettingsPanel",
+    "FileListPanel",
+    "StatusPanel",
+    "MenuBar",
+    "ShortcutManager",
+    "ProgressDialog",
+    "AdvancedSettingsDialog",
+    "BenchmarkDialog",
 ]

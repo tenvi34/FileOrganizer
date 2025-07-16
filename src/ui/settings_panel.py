@@ -14,6 +14,7 @@ from src.constants import DEFAULT_MATCH_MODE, MATCH_MODES
 from src.ui.settings_dialog import AdvancedSettingsDialog
 from src.constants import CONFIG_FILE
 from src.utils.performance import FileInfoCache
+from src.ui.benchmark_dialog import BenchmarkDialog
 
 
 class SettingsPanel:
@@ -248,14 +249,15 @@ class SettingsPanel:
             ("설정 불러오기", self.import_config),
             ("설정 초기화", self.reset_config),
             ("고급 설정...", self.show_advanced_settings),
+            ("성능 테스트...", self.show_benchmark_dialog),
         ]
 
         for idx, (txt, cmd) in enumerate(buttons):
-            row = idx // 2      # 2개씩 한 줄에
+            row = idx // 2  # 2개씩 한 줄에
             col = idx % 2
-            ttk.Button(
-                config_button_frame, text=txt, command=cmd
-            ).grid(row=row, column=col, padx=5, pady=5, sticky="ew")
+            ttk.Button(config_button_frame, text=txt, command=cmd).grid(
+                row=row, column=col, padx=5, pady=5, sticky="ew"
+            )
 
         # 각 컬럼이 넓이 고정 분배
         config_button_frame.columnconfigure(0, weight=1)
@@ -704,6 +706,27 @@ class SettingsPanel:
             if self.callbacks.get("log"):
                 self.callbacks["log"](f"고급 설정 저장 실패: {str(e)}")
             raise
+
+    def show_benchmark_dialog(self):
+        """벤치마크 다이얼로그 표시"""
+
+        def apply_benchmark_settings(settings):
+            """벤치마크 권장 설정 적용"""
+            # 고급 설정에 적용
+            if hasattr(self, "advanced_settings"):
+                self.advanced_settings.update(settings)
+
+            # 로그
+            if self.callbacks.get("log"):
+                self.callbacks["log"]("벤치마크 권장 설정이 적용되었습니다.")
+
+        # 벤치마크 다이얼로그 표시
+        dialog = BenchmarkDialog(
+            self.frame.winfo_toplevel(), apply_callback=apply_benchmark_settings
+        )
+
+        # 다이얼로그가 닫힐 때까지 대기
+        self.frame.wait_window(dialog)
 
     def get_widget(self):
         """위젯 반환"""

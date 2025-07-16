@@ -9,17 +9,23 @@ file_organizer/
 │   │   ├── file_matcher.py    # 파일 매칭
 │   │   ├── file_processor.py  # 파일 처리
 │   │   └── rule_manager.py    # 규칙 관리
-│   ├── ui/                    # UI 관련
+│   ├── ui/                    # UI 관련 (모듈화 완료)
 │   │   ├── __init__.py
-│   │   ├── main_window.py     # 메인 윈도우
-│   │   ├── settings_panel.py  # 설정 패널
-│   │   ├── file_list_panel.py # 파일 목록 패널
-│   │   ├── status_panel.py    # 상태 패널
+│   │   ├── main_window.py     # 메인 윈도우 (조합 역할)
+│   │   ├── settings_panel.py  # 설정 패널 (왼쪽)
+│   │   ├── file_list_panel.py # 파일 목록 패널 (중앙)
+│   │   ├── status_panel.py    # 상태 패널 (오른쪽)
 │   │   ├── menubar.py         # 메뉴바
 │   │   ├── shortcuts.py       # 단축키 관리
-│   │   └── dialogs.py         # 대화상자
+│   │   ├── dialogs.py         # 대화상자
+│   │   ├── progress_dialog.py # 진행률 다이얼로그
+│   │   ├── settings_dialog.py # 고급 설정 다이얼로그
+│   │   └── benchmark_dialog.py# 벤치마크 다이얼로그
 │   └── utils/                 # 유틸리티
 │       ├── __init__.py
 │       ├── config.py          # 설정 관리
 │       ├── logger.py          # 로그 관리
-│       └── validators.py      # 검증 함수
+│       ├── validators.py      # 검증 함수
+│       ├── icon_manager.py    # 아이콘 관리
+│       ├── performance.py     # 성능 최적화 유틸리티
+│       └── benchmark.py       # 벤치마크 도구

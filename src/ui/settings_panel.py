@@ -248,8 +248,8 @@ class SettingsPanel:
             ("설정 내보내기", self.export_config),
             ("설정 불러오기", self.import_config),
             ("설정 초기화", self.reset_config),
-            ("고급 설정...", self.show_advanced_settings),
-            ("성능 테스트...", self.show_benchmark_dialog),
+            ("고급 설정", self.show_advanced_settings),
+            ("성능 테스트", self.show_benchmark_dialog),
         ]
 
         for idx, (txt, cmd) in enumerate(buttons):

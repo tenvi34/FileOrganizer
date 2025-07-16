@@ -37,7 +37,7 @@ class SettingsPanel:
         self.dest_var = tk.StringVar()
         self.match_mode_var = tk.StringVar(value=DEFAULT_MATCH_MODE)
         self.subfolder_var = tk.BooleanVar(value=True)
-        self.operation_var = tk.StringVar(value="move")
+        self.operation_var = tk.StringVar(value="copy")
         self.copy_var = tk.BooleanVar(value=False)
         self.delete_var = tk.BooleanVar(value=False)
         self.permanent_delete_var = tk.BooleanVar(value=False)

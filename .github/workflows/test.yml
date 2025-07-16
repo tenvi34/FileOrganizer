@@ -19,6 +19,7 @@ jobs:
         pip install send2trash
         pip install Pillow
         pip install pywin32
+        pip install psutil
     
     - name: Run tests
       run: |

@@ -8,7 +8,7 @@
 
 # 애플리케이션 정보
 APP_TITLE = "파일 자동 분류 프로그램"
-APP_VERSION = "2.1.3"
+APP_VERSION = "2.1.4"
 WINDOW_SIZE = "1400x800"
 MAC_SIZE = "1200x700"
 

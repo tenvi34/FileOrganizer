@@ -8,6 +8,8 @@
 import os
 import tkinter as tk
 import threading
+import subprocess
+import platform
 from tkinter import ttk
 from datetime import datetime, timedelta
 
@@ -230,7 +232,14 @@ class FileListPanel:
         tree_frame.columnconfigure(0, weight=1)
         tree_frame.rowconfigure(0, weight=1)
 
+        # 이벤트 바인딩
         self.file_tree.bind("<Button-1>", self.on_file_click)
+        self.file_tree.bind("<Double-Button-1>", self.on_file_double_click)  # 더블 클릭
+        self.file_tree.bind("<Return>", self.on_file_enter)  # 엔터
+
+        # 컨텍스트 메뉴
+        self.create_context_menu()
+        self.file_tree.bind("<Button-3>", self.show_context_menu)  # 우클릭
 
     # def refresh_file_list(self):
     #     """파일 목록 새로고침"""
@@ -483,41 +492,40 @@ class FileListPanel:
                     file_info["destination"],
                 ),
             )
-            
+
             self.file_vars[item_id] = tk.BooleanVar(value=True)
-        
+
         # 카운트 업데이트
         self.file_count_label.config(text=f"({len(self.file_list_data)}개 파일)")
-        self.callbacks.get('update_stats', lambda: None)()
+        self.callbacks.get("update_stats", lambda: None)()
 
     def _update_scan_progress(self, current, total, message):
         """스캔 진행률 업데이트"""
-        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+        if hasattr(self, "progress_dialog") and self.progress_dialog:
             self.progress_dialog.update_progress(
-                current, total, 
-                "파일을 검색하는 중...", 
-                message
+                current, total, "파일을 검색하는 중...", message
             )
 
     def _scan_complete(self):
         """스캔 완료"""
-        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+        if hasattr(self, "progress_dialog") and self.progress_dialog:
             self.progress_dialog.close()
             self.progress_dialog = None
-        
+
         # 필터 옵션 업데이트
         self.update_extension_filter_options()
-        
+
         # 최종 통계 업데이트
-        self.callbacks.get('update_stats', lambda: None)()
+        self.callbacks.get("update_stats", lambda: None)()
 
     def _scan_error(self, error_msg):
         """스캔 오류"""
-        if hasattr(self, 'progress_dialog') and self.progress_dialog:
+        if hasattr(self, "progress_dialog") and self.progress_dialog:
             self.progress_dialog.close()
             self.progress_dialog = None
-        
+
         from tkinter import messagebox
+
         messagebox.showerror("오류", f"파일 검색 중 오류 발생:\n{error_msg}")
 
     def get_file_info(self, file_path, dest_folder, keyword, match_mode):
@@ -570,6 +578,169 @@ class FileListPanel:
                     values[0] = check_mark
                     self.file_tree.item(item, values=values)
                     self.callbacks.get("update_stats", lambda: None)()
+
+    def create_context_menu(self):
+        """컨텍스트 메뉴 생성"""
+        self.context_menu = tk.Menu(self.file_tree, tearoff=0)
+        self.context_menu.add_command(
+            label="파일 열기", command=self.open_selected_file
+        )
+        self.context_menu.add_command(
+            label="폴더 열기", command=self.open_file_location
+        )
+        self.context_menu.add_separator()
+        self.context_menu.add_command(
+            label="속성 보기", command=self.show_file_properties
+        )
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="선택", command=self.toggle_selected_file)
+        self.context_menu.add_command(label="모두 선택", command=self.select_all_files)
+        self.context_menu.add_command(
+            label="모두 해제", command=self.deselect_all_files
+        )
+
+    def show_context_menu(self, event):
+        """컨텍스트 메뉴 표시"""
+        item = self.file_tree.identify_row(event.y)
+        if item:
+            self.file_tree.selection_set(item)
+            self.context_menu.post(event.x_root, event.y_root)
+
+    def on_file_double_click(self, event):
+        """파일 더블클릭 이벤트"""
+        region = self.file_tree.identify("region", event.x, event.y)
+        if region == "cell":
+            column = self.file_tree.identify_column(event.x)
+            if column != "#1":  # 체크박스 열이 아닌 경우
+                self.open_selected_file()
+
+    def on_file_enter(self, event):
+        """엔터키 이벤트"""
+        selection = self.file_tree.selection()
+        if selection:
+            self.open_selected_file()
+
+    def open_selected_file(self):
+        """선택된 파일 열기"""
+        selection = self.file_tree.selection()
+        if not selection:
+            return
+
+        item = selection[0]
+        # 트리에서 아이템의 인덱스 찾기
+        items = self.file_tree.get_children()
+        index = items.index(item)
+
+        if 0 <= index < len(self.file_list_data):
+            file_info = self.file_list_data[index]
+            file_path = file_info["path"]
+
+            if os.path.exists(file_path):
+                self.open_file(file_path)
+
+    def open_file_location(self):
+        """파일 위치 열기"""
+        selection = self.file_tree.selection()
+        if not selection:
+            return
+
+        item = selection[0]
+        items = self.file_tree.get_children()
+        index = items.index(item)
+
+        if 0 <= index < len(self.file_list_data):
+            file_info = self.file_list_data[index]
+            file_path = file_info["path"]
+
+            if os.path.exists(file_path):
+                self.open_folder(os.path.dirname(file_path))
+
+    def show_file_properties(self):
+        """파일 속성 표시"""
+        selection = self.file_tree.selection()
+        if not selection:
+            return
+
+        item = selection[0]
+        items = self.file_tree.get_children()
+        index = items.index(item)
+
+        if 0 <= index < len(self.file_list_data):
+            file_info = self.file_list_data[index]
+            self.show_file_info_dialog(file_info)
+
+    def toggle_selected_file(self):
+        """선택된 파일 체크 토글"""
+        selection = self.file_tree.selection()
+        if not selection:
+            return
+
+        item = selection[0]
+        if item in self.file_vars:
+            current = self.file_vars[item].get()
+            self.file_vars[item].set(not current)
+            check_mark = "✓" if not current else ""
+            values = list(self.file_tree.item(item)["values"])
+            values[0] = check_mark
+            self.file_tree.item(item, values=values)
+            self.callbacks.get("update_stats", lambda: None)()
+
+    def open_file(self, file_path):
+        """파일 열기 (플랫폼별)"""
+        try:
+            if platform.system() == "Windows":
+                os.startfile(file_path)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", file_path])
+            else:  # Linux
+                subprocess.run(["xdg-open", file_path])
+        except Exception as e:
+            from tkinter import messagebox
+
+            messagebox.showerror("오류", f"파일을 열 수 없습니다:\n{str(e)}")
+
+    def open_folder(self, folder_path):
+        """폴더 열기 (플랫폼별)"""
+        try:
+            if platform.system() == "Windows":
+                os.startfile(folder_path)
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", folder_path])
+            else:  # Linux
+                subprocess.run(["xdg-open", folder_path])
+        except Exception as e:
+            from tkinter import messagebox
+
+            messagebox.showerror("오류", f"폴더를 열 수 없습니다:\n{str(e)}")
+
+    def show_file_info_dialog(self, file_info):
+        """파일 정보 다이얼로그"""
+        from tkinter import messagebox
+
+        file_path = file_info["path"]
+
+        try:
+            stat = os.stat(file_path)
+            size_bytes = stat.st_size
+            created = datetime.fromtimestamp(stat.st_ctime).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+            modified = datetime.fromtimestamp(stat.st_mtime).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            info_text = f"""파일명: {file_info['filename']}
+경로: {file_path}
+크기: {self.format_file_size(size_bytes)} ({size_bytes:,} 바이트)
+생성일: {created}
+수정일: {modified}
+매칭 규칙: {file_info['rule']}
+대상: {file_info['destination']}"""
+
+            messagebox.showinfo("파일 정보", info_text)
+
+        except Exception as e:
+            messagebox.showerror("오류", f"파일 정보를 가져올 수 없습니다:\n{str(e)}")
 
     def select_all_files(self):
         """모든 파일 선택"""

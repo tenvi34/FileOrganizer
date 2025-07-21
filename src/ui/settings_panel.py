@@ -15,9 +15,10 @@ from src.ui.settings_dialog import AdvancedSettingsDialog
 from src.constants import CONFIG_FILE
 from src.utils.performance import FileInfoCache
 from src.ui.benchmark_dialog import BenchmarkDialog
+from src.ui.drag_drop_mixin import DragDropMixin, DragDropFrame
 
 
-class SettingsPanel:
+class SettingsPanel(DragDropMixin):
     """설정 패널 클래스"""
 
     def __init__(self, parent, rule_manager, callbacks):
@@ -66,7 +67,7 @@ class SettingsPanel:
         self.create_options_tab()  # 작업 옵션 탭
 
     def create_basic_settings_tab(self):
-        """기본 설정 탭"""
+        """기본 설정 탭 - 드래그 앤 드롭 추가"""
         basic_frame = ttk.Frame(self.notebook)
         self.notebook.add(basic_frame, text="기본 설정")
 
@@ -76,6 +77,13 @@ class SettingsPanel:
 
         ttk.Label(folder_frame, text="대상 폴더:").pack(anchor=tk.W)
 
+        # 드래그 앤 드롭 프레임 추가
+        self.drag_drop_frame = DragDropFrame(
+            folder_frame, self.source_var, "폴더를 여기로 드래그하거나 클릭하세요."
+        )
+        self.drag_drop_frame.pack(fill=tk.X, pady=5)
+
+        # 기존 폴더 선택 UI
         folder_select_frame = ttk.Frame(folder_frame)
         folder_select_frame.pack(fill=tk.X, pady=5)
 
@@ -90,7 +98,7 @@ class SettingsPanel:
             folder_frame, text="하위 폴더 포함", variable=self.subfolder_var
         ).pack(anchor=tk.W, pady=5)
 
-        # 최근 폴더 목록
+        # 최근 폴더 목록에 드래그 앤 드롭 추가
         recent_frame = ttk.LabelFrame(basic_frame, text="최근 사용 폴더", padding=10)
         recent_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
@@ -98,8 +106,16 @@ class SettingsPanel:
         self.recent_listbox.pack(fill=tk.BOTH, expand=True)
         self.recent_listbox.bind("<Double-Button-1>", self.on_recent_folder_select)
 
+        # 최근 폴더 리스트박스에 드래그 앤 드롭 설정
+        self.setup_drag_drop(
+            self.recent_listbox,
+            self.source_var,
+            callback=lambda path: self.add_to_recent_folders(path),
+            accept_folders=True,
+        )
+
     def create_rules_tab(self):
-        """규칙 관리 탭"""
+        """규칙 관리 탭 - 드래그 앤 드롭 추가"""
         rules_frame = ttk.Frame(self.notebook)
         self.notebook.add(rules_frame, text="규칙 관리")
 
@@ -130,9 +146,13 @@ class SettingsPanel:
         )
         dest_frame = ttk.Frame(add_rule_frame)
         dest_frame.grid(row=2, column=1, sticky=(tk.W, tk.E), pady=2)
-        ttk.Entry(dest_frame, textvariable=self.dest_var).pack(
-            side=tk.LEFT, fill=tk.X, expand=True
-        )
+
+        dest_entry = ttk.Entry(dest_frame, textvariable=self.dest_var)
+        dest_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # 대상 폴더 엔트리에 드래그 앤 드롭 설정
+        self.setup_drag_drop(dest_entry, self.dest_var, accept_folders=True)
+
         ttk.Button(
             dest_frame, text="...", command=self.select_dest_folder, width=3
         ).pack(side=tk.LEFT, padx=(2, 0))
@@ -243,7 +263,7 @@ class SettingsPanel:
         config_button_frame = ttk.Frame(config_frame)
         config_button_frame.pack(fill=tk.X)
 
-        # 버튼 4개 생성
+        # 버튼 생성
         buttons = [
             ("설정 내보내기", self.export_config),
             ("설정 불러오기", self.import_config),

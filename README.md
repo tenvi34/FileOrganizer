@@ -197,32 +197,41 @@ python main.py
 
 ### 실행 파일 빌드
 
-#### Windows
+### Windows 실행 파일 생성
+
 ```bash
-pyinstaller --onefile --windowed --icon=assets/icon.ico --name=FileOrganizer main.py
+pyinstaller FileOrganizer.spec
+# 또는
+pyinstaller --onefile --windowed --noupx --name "FileOrganizer" --add-data "src;src" main.py
 ```
 
-#### macOS
+### macOS 앱 생성
+
 ```bash
-pyinstaller --onefile --windowed --icon=assets/icon.icns --name=FileOrganizer main.py
+pyinstaller FileOrganizer.spec
+# 생성된 .app 파일은 dist 폴더에 위치
 ```
 
-#### Linux
+### Linux 실행 파일 생성
+
 ```bash
-pyinstaller --onefile --windowed --icon=assets/icon.png --name=FileOrganizer main.py
+pyinstaller FileOrganizer.spec
 ```
 
 ## 🧪 테스트
 
 ```bash
-# 전체 테스트 실행
+# 모든 테스트 실행
 python test_file_organizer.py
 
-# 빠른 테스트
+# 빠른 테스트만 실행
 python test_file_organizer.py --quick
 
-# 통합 테스트만
+# 통합 테스트만 실행
 python test_file_organizer.py --integration
+
+# pytest 사용
+pytest test_file_organizer.py -v
 ```
 
 ## 🐛 알려진 이슈 및 해결방법

@@ -25,15 +25,40 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Build executable
+    - name: Create required directories
       run: |
-        pyinstaller --onefile --windowed --noupx --name "FileOrganizer" --add-data "src;src" main.py
+        mkdir -p config
+        mkdir -p logs
+    
+    - name: Build executable with PyInstaller
+      run: |
+        pyinstaller --onefile --windowed --noupx `
+          --name "FileOrganizer" `
+          --icon "assets/icon.ico" `
+          --add-data "src;src" `
+          --add-data "config;config" `
+          --hidden-import "tkinterdnd2" `
+          --hidden-import "PIL" `
+          --hidden-import "psutil" `
+          --hidden-import "send2trash" `
+          main.py
+    
+    - name: Test executable exists
+      run: |
+        if (Test-Path "dist/FileOrganizer.exe") {
+          Write-Host "✅ Build successful: FileOrganizer.exe created"
+          dir dist
+        } else {
+          Write-Host "❌ Build failed: FileOrganizer.exe not found"
+          exit 1
+        }
     
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: FileOrganizer-Windows
         path: dist/FileOrganizer.exe
+        retention-days: 30
     
     - name: Create Release
       if: startsWith(github.ref, 'refs/tags/')
@@ -44,3 +69,106 @@ jobs:
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create required directories
+      run: |
+        mkdir -p config
+        mkdir -p logs
+    
+    - name: Build executable with PyInstaller
+      run: |
+        pyinstaller --onefile --windowed --noupx \
+          --name "FileOrganizer" \
+          --icon "assets/icon.icns" \
+          --add-data "src:src" \
+          --add-data "config:config" \
+          --hidden-import "tkinterdnd2" \
+          --hidden-import "PIL" \
+          --hidden-import "psutil" \
+          --hidden-import "send2trash" \
+          --osx-bundle-identifier "com.fileorganizer.app" \
+          main.py
+    
+    - name: Create DMG (optional)
+      run: |
+        # DMG 생성 스크립트 (선택사항)
+        echo "DMG creation can be added here"
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FileOrganizer-macOS
+        path: dist/FileOrganizer.app
+        retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk python3-pil python3-pil.imagetk
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create required directories
+      run: |
+        mkdir -p config
+        mkdir -p logs
+    
+    - name: Build executable with PyInstaller
+      run: |
+        pyinstaller --onefile --windowed --noupx \
+          --name "FileOrganizer" \
+          --icon "assets/icon.png" \
+          --add-data "src:src" \
+          --add-data "config:config" \
+          --hidden-import "tkinterdnd2" \
+          --hidden-import "PIL" \
+          --hidden-import "psutil" \
+          --hidden-import "send2trash" \
+          main.py
+    
+    - name: Test executable exists
+      run: |
+        if [ -f "dist/FileOrganizer" ]; then
+          echo "✅ Build successful: FileOrganizer created"
+          ls -la dist/
+        else
+          echo "❌ Build failed: FileOrganizer not found"
+          exit 1
+        fi
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: FileOrganizer-Linux
+        path: dist/FileOrganizer
+        retention-days: 30

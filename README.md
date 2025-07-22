@@ -221,17 +221,20 @@ pyinstaller FileOrganizer.spec
 ## 🧪 테스트
 
 ```bash
-# 모든 테스트 실행
+# 전체 테스트
 python test_file_organizer.py
 
-# 빠른 테스트만 실행
+# 빠른 테스트 (핵심 기능만)
 python test_file_organizer.py --quick
 
-# 통합 테스트만 실행
+# 통합 테스트만
 python test_file_organizer.py --integration
 
-# pytest 사용
-pytest test_file_organizer.py -v
+# 성능 테스트만
+python test_file_organizer.py --performance
+
+# 자동 정리 기능 테스트만
+python test_file_organizer.py --auto
 ```
 
 ## 🐛 알려진 이슈 및 해결방법

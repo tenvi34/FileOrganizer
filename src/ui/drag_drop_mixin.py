@@ -7,6 +7,7 @@
 
 import os
 import platform
+import tkinter as tk
 from tkinter import StringVar, Widget, filedialog
 from typing import Callable, Optional
 
@@ -167,16 +168,42 @@ class DragDropMixin:
     ):
         """기본 드래그 앤 드롭 UI (실제 DnD는 아님)"""
         # 드래그 앤 드롭을 시각적으로 표시
-        original_bg = widget.cget("background") if hasattr(widget, "cget") else None
+        original_bg = None
+
+        # 위젯 타입에 따라 배경색 가져오기
+        try:
+            if hasattr(widget, "cget"):
+                # Frame의 경우 'bg' 사용
+                try:
+                    original_bg = widget.cget("bg")
+                except tk.TclError:
+                    try:
+                        original_bg = widget.cget("background")
+                    except tk.TclError:
+                        original_bg = "#ffffff"  # 기본값
+        except:
+            original_bg = "#ffffff"
 
         def on_enter(event):
-            if original_bg:
-                widget.config(background="#e0e0e0")
+            if original_bg and hasattr(widget, "config"):
+                try:
+                    widget.config(bg="#e0e0e0")
+                except tk.TclError:
+                    try:
+                        widget.config(background="#e0e0e0")
+                    except:
+                        pass
             widget.config(cursor="hand2")
 
         def on_leave(event):
-            if original_bg:
-                widget.config(background=original_bg)
+            if original_bg and hasattr(widget, "config"):
+                try:
+                    widget.config(bg=original_bg)
+                except tk.TclError:
+                    try:
+                        widget.config(background=original_bg)
+                    except:
+                        pass
             widget.config(cursor="")
 
         def on_click(event):
@@ -193,7 +220,10 @@ class DragDropMixin:
 
         # 도움말 텍스트 추가 (Text 위젯인 경우)
         if hasattr(widget, "insert"):
-            widget.insert("1.0", "클릭하여 폴더를 선택하세요.")
+            if isinstance(widget, tk.Text):
+                widget.insert("1.0", "클릭하여 폴더를 선택하세요.")
+            elif isinstance(widget, tk.Listbox):
+                widget.insert(tk.END, "클릭하여 폴더를 선택하세요.")
             widget.config(state="disabled")
 
 

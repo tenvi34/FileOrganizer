@@ -16,12 +16,13 @@ from src.constants import CONFIG_FILE
 from src.utils.performance import FileInfoCache
 from src.ui.benchmark_dialog import BenchmarkDialog
 from src.ui.drag_drop_mixin import DragDropMixin, DragDropFrame
+from src.core.file_processor import FileProcessor
 
 
 class SettingsPanel(DragDropMixin):
     """설정 패널 클래스"""
 
-    def __init__(self, parent, rule_manager, callbacks):
+    def __init__(self, parent, rule_manager, file_processor, callbacks):
         """초기화
 
         Args:
@@ -31,6 +32,7 @@ class SettingsPanel(DragDropMixin):
         """
         self.parent = parent
         self.rule_manager = rule_manager
+        self.file_processor = file_processor
         self.callbacks = callbacks
 
         # UI 변수
@@ -211,7 +213,7 @@ class SettingsPanel(DragDropMixin):
         ).pack(side=tk.LEFT, padx=2)
 
     def create_options_tab(self):
-        """작업 옵션 탭"""
+        """작업 옵션 탭 - 자동 정리 기능 추가"""
         options_frame = ttk.Frame(self.notebook)
         self.notebook.add(options_frame, text="작업 옵션")
 
@@ -256,14 +258,100 @@ class SettingsPanel(DragDropMixin):
         # 초기 상태 설정
         self.delete_options_frame.pack_forget()
 
-        # 설정 관리 프레임 추가
+        # 자동 정리 프레임 추가
+        auto_frame = ttk.LabelFrame(options_frame, text="자동 파일 정리", padding=10)
+        auto_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        # 자동 정리 활성화
+        self.auto_organize_var = tk.BooleanVar(value=False)
+        self.auto_check = ttk.Checkbutton(
+            auto_frame,
+            text="자동 파일 정리 활성화",
+            variable=self.auto_organize_var,
+            command=self.toggle_auto_organize
+        )
+        self.auto_check.pack(anchor=tk.W, pady=5)
+
+        # 감시 폴더 목록
+        watch_list_frame = ttk.Frame(auto_frame)
+        watch_list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        ttk.Label(watch_list_frame, text="감시 폴더:").pack(anchor=tk.W)
+
+        # 리스트박스와 스크롤바
+        list_frame = ttk.Frame(watch_list_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        self.watch_listbox = tk.Listbox(list_frame, height=4)
+        scrollbar = ttk.Scrollbar(list_frame, command=self.watch_listbox.yview)
+        self.watch_listbox.configure(yscrollcommand=scrollbar.set)
+
+        self.watch_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # 감시 폴더 관리 버튼
+        self.watch_button_frame = ttk.Frame(auto_frame)
+        self.watch_button_frame.pack(fill=tk.X)
+
+        ttk.Button(
+            self.watch_button_frame,
+            text="폴더 추가",
+            command=self.add_watch_folder,
+            state=tk.DISABLED
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            self.watch_button_frame,
+            text="폴더 제거",
+            command=self.remove_watch_folder,
+            state=tk.DISABLED
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Button(
+            self.watch_button_frame,
+            text="다운로드 폴더 추가",
+            command=self.add_downloads_folder,
+            state=tk.DISABLED
+        ).pack(side=tk.LEFT, padx=2)
+
+        # 자동 정리 설정
+        settings_frame = ttk.Frame(auto_frame)
+        settings_frame.pack(fill=tk.X, pady=5)
+
+        ttk.Label(settings_frame, text="파일 처리 대기 시간:").pack(side=tk.LEFT)
+        self.delay_var = tk.IntVar(value=5)
+        self.delay_spinbox = ttk.Spinbox(
+            settings_frame,
+            from_=1,
+            to=60,
+            textvariable=self.delay_var,
+            width=5,
+            state=tk.DISABLED
+        )
+        self.delay_spinbox.pack(side=tk.LEFT, padx=5)
+        ttk.Label(settings_frame, text="초").pack(side=tk.LEFT)
+
+        # 상태 표시
+        self.auto_status_label = ttk.Label(
+            auto_frame,
+            text="자동 정리: 비활성화",
+            foreground="gray"
+        )
+        self.auto_status_label.pack(pady=5)
+
+        # 초기 자동 정리 버튼 상태 설정
+        for child in self.watch_button_frame.winfo_children():
+            child.configure(state=tk.DISABLED)
+        self.delay_spinbox.configure(state=tk.DISABLED)
+
+        # 설정 관리 프레임
         config_frame = ttk.LabelFrame(options_frame, text="설정 관리", padding=10)
         config_frame.pack(fill=tk.X, padx=10, pady=10)
 
         config_button_frame = ttk.Frame(config_frame)
         config_button_frame.pack(fill=tk.X)
 
-        # 버튼 생성
+        # 버튼들 생성
         buttons = [
             ("설정 내보내기", self.export_config),
             ("설정 불러오기", self.import_config),
@@ -273,7 +361,7 @@ class SettingsPanel(DragDropMixin):
         ]
 
         for idx, (txt, cmd) in enumerate(buttons):
-            row = idx // 2  # 2개씩 한 줄에
+            row = idx // 2
             col = idx % 2
             ttk.Button(config_button_frame, text=txt, command=cmd).grid(
                 row=row, column=col, padx=5, pady=5, sticky="ew"
@@ -302,6 +390,114 @@ class SettingsPanel(DragDropMixin):
             style="Accent.TButton",
         )
         self.execute_button.pack(side=tk.LEFT, padx=5)
+
+    # 자동 정리 관련 메서드들
+    def toggle_auto_organize(self):
+        """자동 정리 토글"""
+        if self.auto_organize_var.get():
+            # 활성화
+            self.start_auto_organize()
+        else:
+            # 비활성화
+            self.stop_auto_organize()
+
+    def start_auto_organize(self):
+        """자동 정리 시작"""
+        # AutoOrganizer 초기화 (아직 없으면 생성)
+        if not hasattr(self, 'auto_organizer'):
+            from src.utils.file_monitor import AutoOrganizer
+            self.auto_organizer = AutoOrganizer(
+                self.rule_manager,
+                self.file_processor,
+                self.callbacks.get('log', print)
+            )
+        
+        # 감시 폴더 추가
+        for i in range(self.watch_listbox.size()):
+            folder = self.watch_listbox.get(i)
+            self.auto_organizer.add_watch_folder(folder)
+        
+        # 대기 시간 설정
+        self.auto_organizer.organize_delay = self.delay_var.get()
+        
+        # 자동 정리 시작
+        self.auto_organizer.start_auto_organize()
+        
+        # UI 업데이트
+        self.auto_status_label.config(
+            text="자동 정리: 활성화",
+            foreground="green"
+        )
+        
+        # 버튼 활성화
+        for child in self.watch_button_frame.winfo_children():
+            child.configure(state=tk.NORMAL)
+        self.delay_spinbox.configure(state=tk.NORMAL)
+        
+        if self.callbacks.get('log'):
+            self.callbacks['log']("자동 파일 정리가 시작되었습니다.")
+
+    def stop_auto_organize(self):
+        """자동 정리 중지"""
+        if hasattr(self, 'auto_organizer'):
+            self.auto_organizer.stop_auto_organize()
+        
+        # UI 업데이트
+        self.auto_status_label.config(
+            text="자동 정리: 비활성화",
+            foreground="gray"
+        )
+        
+        # 버튼 비활성화
+        for child in self.watch_button_frame.winfo_children():
+            child.configure(state=tk.DISABLED)
+        self.delay_spinbox.configure(state=tk.DISABLED)
+        
+        if self.callbacks.get('log'):
+            self.callbacks['log']("자동 파일 정리가 중지되었습니다.")
+
+    def add_watch_folder(self):
+        """감시 폴더 추가"""
+        from tkinter import filedialog
+        
+        folder = filedialog.askdirectory(title="감시할 폴더 선택")
+        if folder:
+            # 중복 확인
+            items = list(self.watch_listbox.get(0, tk.END))
+            if folder not in items:
+                self.watch_listbox.insert(tk.END, folder)
+                
+                # 자동 정리가 활성화되어 있으면 즉시 추가
+                if hasattr(self, 'auto_organizer') and self.auto_organize_var.get():
+                    self.auto_organizer.add_watch_folder(folder)
+
+    def remove_watch_folder(self):
+        """감시 폴더 제거"""
+        selection = self.watch_listbox.curselection()
+        if selection:
+            folder = self.watch_listbox.get(selection[0])
+            self.watch_listbox.delete(selection[0])
+            
+            # 자동 정리가 활성화되어 있으면 즉시 제거
+            if hasattr(self, 'auto_organizer') and self.auto_organize_var.get():
+                self.auto_organizer.remove_watch_folder(folder)
+
+    def add_downloads_folder(self):
+        """다운로드 폴더 추가"""
+        import os
+        
+        # 플랫폼별 다운로드 폴더 경로
+        home = os.path.expanduser("~")
+        downloads = os.path.join(home, "Downloads")
+        
+        if os.path.exists(downloads):
+            items = list(self.watch_listbox.get(0, tk.END))
+            if downloads not in items:
+                self.watch_listbox.insert(tk.END, downloads)
+                
+                # 자동 정리가 활성화되어 있으면 즉시 추가
+                if hasattr(self, 'auto_organizer') and self.auto_organize_var.get():
+                    self.auto_organizer.add_watch_folder(downloads)
 
     # 이벤트 핸들러
     def select_source_folder(self):

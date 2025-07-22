@@ -305,7 +305,7 @@ class MainWindow:
 
         # 1. 설정 패널 (왼쪽)
         self.settings_panel = SettingsPanel(
-            self.paned_window, self.rule_manager, callbacks
+            self.paned_window, self.rule_manager, self.file_processor, callbacks
         )
         self.paned_window.add(self.settings_panel.get_widget(), weight=1)
 

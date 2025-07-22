@@ -5,6 +5,7 @@ from .validators import Validator
 from .icon_manager import IconManager
 from .performance import FileInfoCache, ProgressTracker, copy_file_with_progress
 from .benchmark import PerformanceBenchmark
+from .file_monitor import FileSystemMonitor, AutoOrganizer
 
 __all__ = [
     "ConfigManager", 
@@ -14,5 +15,7 @@ __all__ = [
     "FileInfoCache",
     "ProgressTracker",
     "copy_file_with_progress",
-    "PerformanceBenchmark"
+    "PerformanceBenchmark",
+    "FileSystemMonitor",
+    "AutoOrganizer",
 ]
